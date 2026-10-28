@@ -34,7 +34,7 @@ CONTRACT.md API contract between frontend and backend
 
 ## Run locally
 
-**Backend** (Python 3.11+)
+**Backend** (Python 3.10+)
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
