@@ -7,13 +7,12 @@ If GEMINI_API_KEY is not set (or Gemini fails), search falls back to keywords.
 import logging
 import os
 
-import httpx
+from .gemini import API, GeminiError, post_with_retry
 
 log = logging.getLogger("kathagraph.embeddings")
 
 DIM = 768  # must match chunks.embedding vector(768) in schema.sql
 BATCH = 50
-API = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
 class EmbeddingError(RuntimeError):
@@ -46,17 +45,10 @@ def embed(texts: list[str], task: str = "RETRIEVAL_DOCUMENT") -> list[list[float
             ]
         }
         try:
-            resp = httpx.post(
-                f"{API}/{model}:batchEmbedContents",
-                json=body,
-                headers={"x-goog-api-key": key},
-                timeout=60,
-            )
-        except httpx.HTTPError as e:
-            raise EmbeddingError(f"Could not reach Gemini: {e}") from e
-        if resp.status_code >= 300:
-            raise EmbeddingError(f"Gemini error {resp.status_code}: {resp.text[:200]}")
-        vectors.extend(e["values"] for e in resp.json()["embeddings"])
+            data = post_with_retry(f"{API}/{model}:batchEmbedContents", body, timeout=60)
+        except GeminiError as e:
+            raise EmbeddingError(str(e)) from e
+        vectors.extend(e["values"] for e in data["embeddings"])
     return vectors
 
 
