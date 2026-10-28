@@ -13,7 +13,7 @@ const EXAMPLES = ["Rudabai", "construction year", "बावड़ी", "UNESCO"
 export default function SearchPage() {
   // useSearchParams needs a Suspense boundary in the App Router.
   return (
-    <Suspense fallback={<main className="mx-auto max-w-3xl px-4 pt-10" />}>
+    <Suspense fallback={null}>
       <SearchView />
     </Suspense>
   );
@@ -47,7 +47,7 @@ function SearchView() {
   }, [q]);
 
   return (
-    <main className="mx-auto max-w-3xl px-4 pb-20 pt-6 sm:pt-10">
+    <main className="kg-sheet mx-auto w-[calc(100%-1.5rem)] max-w-3xl px-4 pb-16 pt-6 sm:pt-10">
       <SearchBar key={q} initial={q} autoFocus={!q} />
 
       {state.kind === "idle" && (

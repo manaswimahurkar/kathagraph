@@ -47,7 +47,7 @@ export default function MonumentPage() {
   }, [state.kind]);
 
   return (
-    <main className="mx-auto max-w-4xl px-4 pb-20 pt-6 sm:pt-8">
+    <main className="kg-sheet mx-auto w-[calc(100%-1.5rem)] max-w-4xl px-4 pb-16 pt-6 sm:pt-8">
       <Link href="/" className="text-[15px] text-water underline-offset-4 hover:underline">
         Back to the map
       </Link>

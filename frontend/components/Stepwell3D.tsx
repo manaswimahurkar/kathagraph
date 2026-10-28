@@ -2,10 +2,11 @@
 
 // A Gujarat-style stepwell, modelled in code (no 3D files to download):
 // a long stepped corridor that drops storey by storey towards a round well shaft,
-// with pillared frames at every landing, carved into a block of earth like a museum diorama.
-// Loaded with dynamic(..., { ssr: false }) because WebGL only exists in the browser.
+// with pillared frames at every landing and a domed pavilion at the entrance.
+// World coordinates: the entrance is at z = 0, the corridor runs towards +z,
+// ground level is y = 0 and everything below it is the well.
 
-import { Canvas, useFrame } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 
@@ -18,25 +19,33 @@ const SEG = RUN + LAND;
 const L = STOREYS * SEG; // corridor length
 const W = 3.6; // corridor width
 const D = STOREYS * H; // depth of the last landing
-const T = D + 0.9; // thickness of the earth block
+const T = D + 3; // thickness of the ground slab
 const SHAFT_R = 2.2;
 const SHAFT_Z = L + 2.0;
 const STEPS_PER_FLIGHT = 6;
 
-const SAND = "#cfae80";
-const SAND_DARK = "#b48c5c";
-const SAND_LIGHT = "#e2c9a1";
-const WALL = "#b58f60";
-const WATER = "#2e5e5b";
+/** Key positions, used by the camera to know where things are. */
+export const DIM = { STOREYS, H, RUN, LAND, SEG, L, W, D, SHAFT_R, SHAFT_Z, PAVILION_Z: -1.4 };
 
-/** Ground block with the corridor + well cut out of it. Shape y = -world z, extruded upwards. */
-function useGroundGeometry() {
+export const COLORS = {
+  sand: "#cfae80",
+  sandDark: "#b48c5c",
+  sandLight: "#e2c9a1",
+  ground: "#d9bf93",
+  wall: "#b58f60",
+  water: "#2e5e5b",
+};
+
+type Box = { p: [number, number, number]; s: [number, number, number]; c: string };
+
+/** The ground for `size` metres around, with the corridor and the well cut out of it. */
+function useGroundGeometry(size: number) {
   return useMemo(() => {
     const outer = new THREE.Shape();
-    outer.moveTo(-5.5, 3.5);
-    outer.lineTo(5.5, 3.5);
-    outer.lineTo(5.5, -(SHAFT_Z + SHAFT_R + 1.6));
-    outer.lineTo(-5.5, -(SHAFT_Z + SHAFT_R + 1.6));
+    outer.moveTo(-size, size);
+    outer.lineTo(size, size);
+    outer.lineTo(size, -size - SHAFT_Z);
+    outer.lineTo(-size, -size - SHAFT_Z);
     outer.closePath();
 
     const half = W / 2;
@@ -45,179 +54,145 @@ function useGroundGeometry() {
     const hole = new THREE.Path();
     hole.moveTo(-half, 0);
     hole.lineTo(-half, -meet);
-    // arc around the far side of the shaft (shape coordinates: centre at y = -SHAFT_Z)
     hole.absarc(0, -SHAFT_Z, SHAFT_R, Math.PI / 2 + a, Math.PI / 2 - a + 2 * Math.PI, false);
     hole.lineTo(half, 0);
     hole.closePath();
     outer.holes.push(hole);
 
+    // Shape y = -world z; extrude upwards, then sink so the top sits at y = 0.
     const g = new THREE.ExtrudeGeometry(outer, { depth: T, bevelEnabled: false, curveSegments: 48 });
-    g.rotateX(-Math.PI / 2); // extrusion now points up, shape y -> world -z
+    g.rotateX(-Math.PI / 2);
     g.translate(0, -T, 0);
     return g;
-  }, []);
+  }, [size]);
 }
 
-/** Every box in the model (steps, landings, pillars, beams, mouldings) in one list. */
+/** Every box in the model (steps, landings, pillars, beams, mouldings, pavilion). */
 function useBlocks() {
   return useMemo(() => {
-    const blocks: { p: [number, number, number]; s: [number, number, number]; c: string }[] = [];
+    const { sand, sandDark, sandLight } = COLORS;
+    const blocks: Box[] = [];
     const floor = -T;
     for (let k = 0; k < STOREYS; k++) {
       const z0 = k * SEG;
       const top = -k * H;
-      // flight of stairs: solid blocks down to the bottom of the block
       for (let i = 0; i < STEPS_PER_FLIGHT; i++) {
         const y = top - ((i + 1) * H) / STEPS_PER_FLIGHT;
         const d = RUN / STEPS_PER_FLIGHT;
-        blocks.push({ p: [0, (y + floor) / 2, z0 + d * i + d / 2], s: [W, y - floor, d], c: i % 2 ? SAND : SAND_LIGHT });
+        blocks.push({ p: [0, (y + floor) / 2, z0 + d * i + d / 2], s: [W, y - floor, d], c: i % 2 ? sand : sandLight });
       }
-      // landing
       const ly = top - H;
-      blocks.push({ p: [0, (ly + floor) / 2, z0 + RUN + LAND / 2], s: [W, ly - floor, LAND], c: SAND_LIGHT });
+      blocks.push({ p: [0, (ly + floor) / 2, z0 + RUN + LAND / 2], s: [W, ly - floor, LAND], c: sandLight });
 
-      // pillared frame on the landing, rising to ground level, with a cross-beam at every storey
+      // pillared frame on each landing, rising to ground level, with a cross-beam at every storey
       const za = z0 + RUN + 0.35;
       const zb = z0 + SEG - 0.35;
       for (const x of [-(W / 2 - 0.25), W / 2 - 0.25]) {
-        for (const z of [za, zb]) {
-          blocks.push({ p: [x, ly / 2, z], s: [0.32, -ly, 0.32], c: SAND_DARK });
-        }
+        for (const z of [za, zb]) blocks.push({ p: [x, ly / 2, z], s: [0.32, -ly, 0.32], c: sandDark });
       }
       for (let j = 0; j <= k; j++) {
         const by = -j * H - 0.08;
-        blocks.push({ p: [0, by, za], s: [W, 0.18, 0.42], c: SAND_DARK });
-        blocks.push({ p: [0, by, zb], s: [W, 0.18, 0.42], c: SAND_DARK });
+        blocks.push({ p: [0, by, za], s: [W, 0.18, 0.42], c: sandDark });
+        blocks.push({ p: [0, by, zb], s: [W, 0.18, 0.42], c: sandDark });
       }
     }
-    // entrance pavilion at ground level: four pillars and a roof slab (dome added separately)
+    // entrance pavilion
     for (const x of [-(W / 2 + 0.2), W / 2 + 0.2]) {
-      for (const z of [-2.4, -0.4]) blocks.push({ p: [x, 0.9, z], s: [0.34, 1.8, 0.34], c: SAND_DARK });
+      for (const z of [-2.4, -0.4]) blocks.push({ p: [x, 0.9, z], s: [0.34, 1.8, 0.34], c: sandDark });
     }
-    blocks.push({ p: [0, 1.88, -1.4], s: [W + 1.2, 0.22, 2.8], c: SAND });
-    blocks.push({ p: [0, 2.06, -1.4], s: [W + 0.6, 0.16, 2.2], c: SAND_LIGHT });
+    blocks.push({ p: [0, 1.88, -1.4], s: [W + 1.2, 0.22, 2.8], c: sand });
+    blocks.push({ p: [0, 2.06, -1.4], s: [W + 0.6, 0.16, 2.2], c: sandLight });
     // low parapet along the corridor edges
-    for (const x of [-(W / 2 + 0.18), W / 2 + 0.18]) blocks.push({ p: [x, 0.18, L / 2], s: [0.3, 0.36, L], c: SAND_DARK });
-    // carved bands running along both corridor walls
+    for (const x of [-(W / 2 + 0.18), W / 2 + 0.18]) blocks.push({ p: [x, 0.18, L / 2], s: [0.3, 0.36, L], c: sandDark });
+    // carved bands along both corridor walls
     for (let j = 1; j <= STOREYS; j++) {
       for (const x of [-W / 2 + 0.06, W / 2 - 0.06]) {
         const len = Math.min(L, j * SEG);
-        blocks.push({ p: [x, -j * H + H * 0.55, len / 2], s: [0.12, 0.1, len], c: SAND_DARK });
+        blocks.push({ p: [x, -j * H + H * 0.55, len / 2], s: [0.12, 0.1, len], c: sandDark });
       }
     }
     return blocks;
   }, []);
 }
 
+/** A small domed kiosk (chhatri), as found around Gujarat stepwells. */
+export function Chhatri({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
+  const { sand, sandDark, sandLight } = COLORS;
+  return (
+    <group position={position} scale={scale}>
+      <mesh position={[0, 0.15, 0]} receiveShadow castShadow>
+        <boxGeometry args={[2.2, 0.3, 2.2]} />
+        <meshStandardMaterial color={sand} roughness={0.95} />
+      </mesh>
+      {[-0.8, 0.8].flatMap((x) =>
+        [-0.8, 0.8].map((z) => (
+          <mesh key={`${x}${z}`} position={[x, 1.0, z]} castShadow>
+            <boxGeometry args={[0.22, 1.4, 0.22]} />
+            <meshStandardMaterial color={sandDark} roughness={0.9} />
+          </mesh>
+        )),
+      )}
+      <mesh position={[0, 1.8, 0]} castShadow>
+        <boxGeometry args={[2.3, 0.2, 2.3]} />
+        <meshStandardMaterial color={sand} roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 1.9, 0]} castShadow>
+        <sphereGeometry args={[0.85, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial color={sandLight} roughness={0.9} />
+      </mesh>
+    </group>
+  );
+}
+
 function Water() {
-  const mat = useRef<THREE.MeshStandardMaterial>(null);
+  const a = useRef<THREE.MeshStandardMaterial>(null);
+  const b = useRef<THREE.MeshStandardMaterial>(null);
   useFrame(({ clock }) => {
-    if (mat.current) mat.current.emissiveIntensity = 0.22 + Math.sin(clock.elapsedTime * 1.6) * 0.06;
+    const v = 0.22 + Math.sin(clock.elapsedTime * 1.6) * 0.07;
+    if (a.current) a.current.emissiveIntensity = v;
+    if (b.current) b.current.emissiveIntensity = v * 0.9;
   });
+  const { water } = COLORS;
   return (
     <>
       <mesh rotation-x={-Math.PI / 2} position={[0, -D - 1.1, SHAFT_Z]}>
         <circleGeometry args={[SHAFT_R - 0.02, 48]} />
-        <meshStandardMaterial ref={mat} color={WATER} emissive={WATER} emissiveIntensity={0.25} roughness={0.15} metalness={0.4} />
+        <meshStandardMaterial ref={a} color={water} emissive={water} emissiveIntensity={0.25} roughness={0.12} metalness={0.45} />
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position={[0, -D + 0.18, L - LAND / 2]}>
         <planeGeometry args={[W - 0.02, LAND]} />
-        <meshStandardMaterial color={WATER} emissive={WATER} emissiveIntensity={0.2} roughness={0.15} metalness={0.4} transparent opacity={0.85} />
+        <meshStandardMaterial ref={b} color={water} emissive={water} emissiveIntensity={0.2} roughness={0.12} metalness={0.45} transparent opacity={0.85} />
       </mesh>
     </>
   );
 }
 
-function Stepwell({ spin }: { spin: boolean }) {
-  const group = useRef<THREE.Group>(null);
-  const ground = useGroundGeometry();
+/** The stepwell and the ground around it. `groundSize` is how far the ground extends, in metres. */
+export function StepwellModel({ groundSize = 40 }: { groundSize?: number }) {
+  const ground = useGroundGeometry(groundSize);
   const blocks = useBlocks();
-  const drag = useRef({ active: false, x: 0, vel: 0 });
-
-  useFrame((_, dt) => {
-    const g = group.current;
-    if (!g) return;
-    const d = drag.current;
-    if (!d.active) {
-      d.vel *= 0.95; // momentum after a drag
-      g.rotation.y += d.vel + (spin ? dt * 0.12 : 0);
-    }
-  });
-
+  const { sandDark, sandLight, ground: groundColor, wall } = COLORS;
   return (
-    <group
-      ref={group}
-      rotation-y={-0.65}
-      scale={0.8}
-      onPointerDown={(e) => {
-        drag.current = { active: true, x: e.clientX, vel: 0 };
-        (e.target as Element)?.setPointerCapture?.(e.pointerId);
-      }}
-      onPointerMove={(e) => {
-        const d = drag.current;
-        if (!d.active || !group.current) return;
-        const dx = (e.clientX - d.x) * 0.008;
-        group.current.rotation.y += dx;
-        d.vel = dx;
-        d.x = e.clientX;
-      }}
-      onPointerUp={() => (drag.current.active = false)}
-      onPointerLeave={() => (drag.current.active = false)}
-    >
-      <group position={[0, 0, -SHAFT_Z / 2 - 0.5]}>
-        <mesh geometry={ground} castShadow receiveShadow>
-          <meshStandardMaterial attach="material-0" color={SAND_LIGHT} roughness={0.95} />
-          <meshStandardMaterial attach="material-1" color={WALL} roughness={1} />
+    <group>
+      <mesh geometry={ground} receiveShadow>
+        <meshStandardMaterial attach="material-0" color={groundColor} roughness={1} />
+        <meshStandardMaterial attach="material-1" color={wall} roughness={1} />
+      </mesh>
+      {blocks.map((b, i) => (
+        <mesh key={i} position={b.p} castShadow receiveShadow>
+          <boxGeometry args={b.s} />
+          <meshStandardMaterial color={b.c} roughness={0.9} />
         </mesh>
-        {blocks.map((b, i) => (
-          <mesh key={i} position={b.p} castShadow receiveShadow>
-            <boxGeometry args={b.s} />
-            <meshStandardMaterial color={b.c} roughness={0.9} />
-          </mesh>
-        ))}
-        <mesh position={[0, 2.14, -1.4]} castShadow>
-          <sphereGeometry args={[1.05, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-          <meshStandardMaterial color={SAND_LIGHT} roughness={0.9} />
-        </mesh>
-        <mesh position={[0, 3.25, -1.4]}>
-          <coneGeometry args={[0.16, 0.5, 12]} />
-          <meshStandardMaterial color={SAND_DARK} roughness={0.9} />
-        </mesh>
-        <Water />
-      </group>
+      ))}
+      <mesh position={[0, 2.14, -1.4]} castShadow>
+        <sphereGeometry args={[1.05, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial color={sandLight} roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 3.25, -1.4]}>
+        <coneGeometry args={[0.16, 0.5, 12]} />
+        <meshStandardMaterial color={sandDark} roughness={0.9} />
+      </mesh>
+      <Water />
     </group>
-  );
-}
-
-export default function Stepwell3D({ className = "" }: { className?: string }) {
-  const reduceMotion =
-    typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-
-  return (
-    <div className={className} role="img" aria-label="A 3D model of a Gujarat stepwell: stairs descend storey by storey to a round well">
-      <Canvas
-        shadows
-        dpr={[1, 1.75]}
-        camera={{ position: [25, 19, 25], fov: 30, near: 0.5, far: 160 }}
-        onCreated={({ camera }) => camera.lookAt(0, -1, 0)}
-        gl={{ antialias: true, alpha: true }}
-        style={{ touchAction: "pan-y", cursor: "grab" }}
-      >
-        <hemisphereLight args={["#fff1d6", "#3b2a1c", 0.9]} />
-        <directionalLight
-          position={[9, 16, 6]}
-          intensity={2.4}
-          color="#ffd9a0"
-          castShadow
-          shadow-mapSize={[1024, 1024]}
-          shadow-camera-left={-14}
-          shadow-camera-right={14}
-          shadow-camera-top={14}
-          shadow-camera-bottom={-14}
-          shadow-bias={-0.0005}
-        />
-        <Stepwell spin={!reduceMotion} />
-      </Canvas>
-    </div>
   );
 }

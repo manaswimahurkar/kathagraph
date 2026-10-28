@@ -11,6 +11,7 @@ import "@fontsource/rozha-one/400.css";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
 import SiteHeader from "@/components/SiteHeader";
+import WorldBackground from "@/components/WorldBackground";
 
 export const metadata: Metadata = {
   title: { default: "KathaGraph", template: "%s · KathaGraph" },
@@ -23,8 +24,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="min-h-dvh antialiased">
+        <WorldBackground />
         <SiteHeader />
-        {children}
+        <div className="relative z-10">{children}</div>
       </body>
     </html>
   );
