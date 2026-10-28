@@ -81,6 +81,11 @@ export interface Claim {
   status: ClaimStatus;
   source: { id: number; filename: string; page: number | null };
   evidence_text: string | null;
+  /**
+   * Optional, not yet in CONTRACT.md: true when the backend has checked that this fact
+   * is rarely documented elsewhere. The page also works without it.
+   */
+  lesser_known?: boolean;
 }
 
 export interface ConflictClaim {

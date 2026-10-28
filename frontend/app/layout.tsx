@@ -12,6 +12,7 @@ import "@fontsource/hind-vadodara/400.css";
 import "./globals.css";
 import SiteHeader from "@/components/SiteHeader";
 import WorldBackground from "@/components/WorldBackground";
+import { THEME_BOOT_SCRIPT } from "@/lib/prefs";
 
 export const metadata: Metadata = {
   title: { default: "KathaGraph", template: "%s · KathaGraph" },
@@ -22,7 +23,11 @@ export const viewport: Viewport = { themeColor: "#17110c" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
+      <head>
+        {/* apply the saved light/dark theme before the first paint */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body className="min-h-dvh antialiased">
         <WorldBackground />
         <SiteHeader />

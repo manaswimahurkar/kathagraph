@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { getSource, upload } from "@/lib/api";
+import { useEntities } from "@/lib/useEntities";
 
 const MAX_BYTES = 20 * 1024 * 1024; // CONTRACT.md: 413 above 20 MB
 const ACCEPT = ".jpg,.jpeg,.png,.webp,.tif,.tiff,.heic,.pdf,.txt,.md,.csv";
@@ -54,8 +56,22 @@ function formatSize(bytes: number) {
 }
 
 export default function UploadPage() {
+  // useSearchParams needs a Suspense boundary in the App Router.
+  return (
+    <Suspense fallback={null}>
+      <UploadView />
+    </Suspense>
+  );
+}
+
+function UploadView() {
   const [items, setItems] = useState<Item[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  // Arriving from a monument page (/upload?monument=1) shows which monument the material is about.
+  const monumentId = Number(useSearchParams().get("monument")) || null;
+  const { state: entitiesState } = useEntities();
+  const monument = entitiesState.kind === "ready" ? entitiesState.entities.find((e) => e.id === monumentId) : undefined;
   const inputRef = useRef<HTMLInputElement>(null);
   const alive = useRef(true);
 
@@ -100,6 +116,7 @@ export default function UploadPage() {
   }
 
   async function addFiles(files: FileList | File[]) {
+    if (!confirmed) return;
     const fresh: Item[] = Array.from(files).map((file, i) => {
       const problem = precheck(file);
       return {
@@ -123,7 +140,7 @@ export default function UploadPage() {
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragging(false);
-    if (e.dataTransfer.files.length) void addFiles(e.dataTransfer.files);
+    if (confirmed && e.dataTransfer.files.length) void addFiles(e.dataTransfer.files);
   }
 
   const finished = items.filter((i) => ["done", "failed", "rejected"].includes(i.phase)).length;
@@ -131,29 +148,62 @@ export default function UploadPage() {
 
   return (
     <main className="kg-sheet mx-auto w-[calc(100%-1.5rem)] max-w-3xl px-4 pb-16 pt-6 sm:pt-10">
-      <h1 className="font-display text-4xl sm:text-5xl">Add files to the archive</h1>
+      {monument && (
+        <p className="mb-2 text-[14px] text-dust">
+          Adding material about{" "}
+          <Link href={`/monument/${monument.id}`} className="font-medium text-water underline underline-offset-2">
+            {monument.name}
+          </Link>
+        </p>
+      )}
+      <h1 className="font-display text-4xl sm:text-5xl">Add new material to the archive</h1>
       <p className="mt-2 max-w-xl text-[17px] text-dust">
         Photos, scanned documents in English or Hindi, and field notes. KathaGraph reads the GPS and text, then links
         each file to its monument.
       </p>
 
+      <div className="mt-6 rounded-sm border border-ochre/40 bg-ochre-soft/50 p-4">
+        <p className="font-medium text-ochre">Only upload material that is new</p>
+        <p className="mt-1 text-[15px] leading-relaxed">
+          The archive is for evidence that isn&apos;t recorded anywhere else yet: your own photos, field notes, sketches, or
+          unpublished family and community documents. Please don&apos;t upload files that are already in this archive
+          (check the monument&apos;s Sources list) or that are already on the internet, such as photos from websites or
+          text from Wikipedia and books.
+        </p>
+        <label className="mt-3 flex cursor-pointer items-start gap-2.5 text-[15px]">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(e) => setConfirmed(e.target.checked)}
+            className="mt-1 size-4 shrink-0 accent-[var(--color-water)]"
+          />
+          <span>
+            I confirm these files are new: not already in this archive or published online, and mine to share.
+          </span>
+        </label>
+      </div>
+
       <div
         onDragOver={(e) => {
           e.preventDefault();
-          setDragging(true);
+          if (confirmed) setDragging(true);
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        className={`mt-8 rounded-lg border-2 border-dashed px-6 py-12 text-center transition-colors ${
+        aria-disabled={!confirmed}
+        className={`mt-6 rounded-lg border-2 border-dashed px-6 py-12 text-center transition-[colors,opacity] ${
           dragging ? "border-water bg-water-soft" : "border-dust/50 bg-paper"
-        }`}
+        } ${confirmed ? "" : "opacity-55"}`}
       >
-        <p className="font-serif text-xl">{dragging ? "Drop to upload" : "Drag files here"}</p>
+        <p className="font-serif text-xl">
+          {!confirmed ? "Tick the box above to start" : dragging ? "Drop to upload" : "Drag files here"}
+        </p>
         <p className="mt-1 text-[15px] text-dust">JPG, PNG, PDF, TXT or CSV, up to 20 MB each</p>
         <button
           type="button"
+          disabled={!confirmed}
           onClick={() => inputRef.current?.click()}
-          className="mt-5 rounded-md bg-water px-5 py-2.5 text-[15px] font-medium text-paper"
+          className="mt-5 rounded-md bg-water px-5 py-2.5 text-[15px] font-medium text-paper disabled:cursor-not-allowed"
         >
           Choose files
         </button>

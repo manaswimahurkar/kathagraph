@@ -24,6 +24,26 @@ html {
   background: #17110c;
 }
 
+/* Dark theme: the same tokens, re-inked. Every component uses these, so the whole site follows. */
+html[data-theme="dark"] {
+  --color-sand: #1b140e;
+  --color-paper: #251c14;
+  --color-ink: #f1e4cc;
+  --color-dust: #bba98e;
+  --color-line: #4d3c29;
+  --color-water: #86c7bd;
+  --color-water-soft: #1d3936;
+  --color-ochre: #e3a84e;
+  --color-ochre-soft: #4a3416;
+  --color-rust: #f0907a;
+  --color-rust-soft: #4a2219;
+  color-scheme: dark;
+}
+html[data-theme="light"] {
+  background: #e8dcc4;
+  color-scheme: light;
+}
+
 /* Aged paper: fine grain plus a soft darkening towards the edges */
 body {
   background-color: #17110c;
@@ -71,7 +91,7 @@ mark {
 
 /* Shimmer for loading skeletons; respects reduced motion */
 .kg-skeleton {
-  background: linear-gradient(90deg, #e4d8c3 0%, #efe6d6 50%, #e4d8c3 100%);
+  background: linear-gradient(90deg, var(--color-line) 0%, var(--color-sand) 50%, var(--color-line) 100%);
   background-size: 200% 100%;
   animation: kg-shimmer 1.4s ease-in-out infinite;
   border-radius: 4px;
@@ -95,7 +115,8 @@ mark {
 
 /* Floating parchment panel with a double rule, for the home page */
 .kg-panel {
-  background: rgb(248 242 231 / 0.95);
+  background: color-mix(in srgb, var(--color-paper) 95%, transparent);
+  color: var(--color-ink);
   backdrop-filter: blur(8px);
   border: 1px solid #b48c5c;
   outline: 1px solid rgb(180 140 92 / 0.45);
@@ -112,13 +133,14 @@ mark {
   position: relative;
   margin-top: clamp(140px, 30vh, 320px);
   margin-bottom: 4rem;
-  background: rgb(248 242 231 / 0.94);
+  background: color-mix(in srgb, var(--color-paper) 95%, transparent);
+  color: var(--color-ink);
   backdrop-filter: blur(6px);
   border: 1px solid var(--color-line);
   border-radius: 6px;
   outline: 1px solid rgb(180 140 92 / 0.45);
   outline-offset: 4px;
-  box-shadow: 0 30px 80px rgb(0 0 0 / 0.55), 0 2px 0 rgb(255 255 255 / 0.6) inset;
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.55);
   animation: kg-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 @media (min-width: 640px) {
@@ -134,6 +156,13 @@ mark {
 .kg-rise-2 { animation: kg-rise 0.8s 0.25s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .kg-rise-3 { animation: kg-rise 0.8s 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 
+/* The monument pop-up on the map opens with a small lift */
+@keyframes kg-pop {
+  from { opacity: 0; translate: 0 10px; }
+  to { opacity: 1; translate: 0 0; }
+}
+.kg-pop { animation: kg-pop 0.25s ease-out both; }
+
 @media (prefers-reduced-motion: reduce) {
-  .kg-sheet, .kg-rise-1, .kg-rise-2, .kg-rise-3 { animation: none; }
+  .kg-sheet, .kg-rise-1, .kg-rise-2, .kg-rise-3, .kg-pop { animation: none; }
 }
