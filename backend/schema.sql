@@ -24,9 +24,10 @@ create table if not exists chunks (
   page       int,
   text       text not null,
   language   text,
-  embedding  vector(384)   -- size of paraphrase-multilingual-MiniLM-L12-v2
+  embedding  vector(768)   -- Gemini gemini-embedding-001, 768 dimensions
 );
 create index if not exists chunks_source_idx on chunks(source_id);
+create index if not exists chunks_embedding_idx on chunks using hnsw (embedding vector_cosine_ops);
 
 -- Real-world things: monuments, motifs, crafts
 create table if not exists entities (

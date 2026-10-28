@@ -53,10 +53,10 @@ class Extracted:
 def _decode(data: bytes) -> str:
     for enc in ("utf-8-sig", "utf-16", "cp1252"):
         try:
-            return data.decode(enc)
+            return data.decode(enc).replace("\r\n", "\n")
         except UnicodeDecodeError:
             continue
-    return data.decode("utf-8", errors="replace")
+    return data.decode("utf-8", errors="replace").replace("\r\n", "\n")
 
 
 def _ocr_image(img: Image.Image, strict: bool) -> str:
