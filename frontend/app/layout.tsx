@@ -7,6 +7,7 @@ import "@fontsource/hind/600.css";
 import "@fontsource/spectral/400.css";
 import "@fontsource/spectral/400-italic.css";
 import "@fontsource/spectral/600.css";
+import "@fontsource/rozha-one/400.css";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
 import SiteHeader from "@/components/SiteHeader";

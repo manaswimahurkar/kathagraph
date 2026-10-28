@@ -17,7 +17,7 @@ export default function StatusPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 pt-10">
-      <h1 className="font-serif text-3xl font-semibold">System status</h1>
+      <h1 className="font-display text-4xl">System status</h1>
       <p className="mt-2 text-dust">{USE_MOCK ? "Using demo data (NEXT_PUBLIC_API_URL is not set)." : "Checking the live backend."}</p>
       <section className="mt-6 rounded-md border border-line bg-paper p-4">
         {error && <p className="text-rust">Backend unreachable: {error}</p>}

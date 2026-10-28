@@ -52,7 +52,7 @@ export default function MonumentMap({ entities }: { entities: EntitySummary[] })
         {located.map((e) => (
           <Marker key={e.id} position={[e.lat, e.lng]} icon={pinIcon(e)} title={e.name} alt={e.name}>
             <Popup>
-              <p className="font-serif text-[17px] font-semibold leading-tight">{e.name}</p>
+              <p className="font-display text-[19px] leading-tight">{e.name}</p>
               <div className="mt-2.5">
                 <CountChips entity={e} />
               </div>

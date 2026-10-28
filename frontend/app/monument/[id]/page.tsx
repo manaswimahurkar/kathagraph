@@ -83,8 +83,9 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
 
   return (
     <article className="mt-5">
-      <header className="border-b border-line pb-6">
-        <h1 className="font-serif text-4xl leading-tight font-semibold sm:text-5xl">{entity.name}</h1>
+      <header className="pb-8">
+        <p className="text-[13px] tracking-wide text-ochre">Record no. {String(entity.id).padStart(3, "0")}</p>
+        <h1 className="mt-1 font-display text-[2.6rem] leading-[1.05] sm:text-6xl">{entity.name}</h1>
         {entity.aliases.length > 0 && (
           <p className="mt-2 text-[17px] text-dust">
             Also recorded as{" "}
@@ -137,8 +138,9 @@ function JumpLink({ href, tone, children }: { href: string; tone?: "ochre"; chil
 
 function Section({ id, title, intro, children }: { id: string; title: string; intro: string; children: React.ReactNode }) {
   return (
-    <section id={id} aria-labelledby={`${id}-h`} className="scroll-mt-24 border-b border-line py-9">
-      <h2 id={`${id}-h`} className="font-serif text-2xl font-semibold">
+    <section id={id} aria-labelledby={`${id}-h`} className="scroll-mt-28 pb-10">
+      <div className="kg-frieze mb-7" aria-hidden="true" />
+      <h2 id={`${id}-h`} className="font-display text-3xl">
         {title}
       </h2>
       <p className="mt-1 max-w-2xl text-[15px] text-dust">{intro}</p>
@@ -335,7 +337,7 @@ function Disagreements({ entity, citation }: { entity: EntityDetail; citation: M
                       </div>
                     )}
                     <figure className="flex-1 rounded border border-line bg-paper p-4">
-                      <p className="font-serif text-3xl font-semibold">{c.value}</p>
+                      <p className="font-display text-4xl">{c.value}</p>
                       <figcaption className="mt-2 text-sm text-dust">
                         according to <span className="text-ink">{c.source.filename}</span>{" "}
                         <Cite sourceId={c.source.id} n={citation.get(c.source.id)} />

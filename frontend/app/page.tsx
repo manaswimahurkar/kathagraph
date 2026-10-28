@@ -15,6 +15,9 @@ const MonumentMap = dynamic(() => import("@/components/MonumentMap"), {
   loading: () => <Skeleton className="h-full w-full !rounded-none" />,
 });
 
+// The 3D stepwell is decoration, so it loads after the page and never blocks the map.
+const Stepwell3D = dynamic(() => import("@/components/Stepwell3D"), { ssr: false, loading: () => null });
+
 type State =
   | { kind: "loading" }
   | { kind: "error"; message: string }
@@ -36,21 +39,46 @@ export default function HomePage() {
   const unmapped = entities.filter((e) => e.lat == null || e.lng == null).length;
 
   return (
-    <main className="mx-auto max-w-6xl px-4 pb-16 pt-6 sm:pt-10">
-      <SearchBar />
-
-      <div className="mt-8 max-w-2xl sm:mt-10">
-        <h1 className="font-serif text-3xl leading-tight font-semibold sm:text-[2.6rem]">
-          What do we actually know about each monument?
-        </h1>
-        <p className="mt-3 text-[17px] leading-relaxed text-dust">
-          Every fact here points back to the file it came from. Open a monument to see where sources disagree and
-          which documentation is still missing.
+    <>
+      <section className="relative overflow-hidden bg-ink text-paper">
+        <p
+          lang="hi"
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-16 -left-6 select-none font-display text-[13rem] leading-none text-paper/[0.05] sm:text-[20rem]"
+        >
+          कथा
         </p>
+        <div className="relative mx-auto grid max-w-6xl items-center gap-4 px-4 pb-8 pt-10 lg:grid-cols-[1.05fr_1fr] lg:pb-4 lg:pt-6">
+          <div className="lg:py-16">
+            <h1 className="font-display text-[2.6rem] leading-[1.08] sm:text-6xl">
+              What do we actually know about each monument?
+            </h1>
+            <p className="mt-5 max-w-xl font-serif text-lg leading-relaxed text-paper/80 sm:text-xl">
+              Every fact here points back to the photo, scan or field note it came from. Where sources disagree, you see
+              both. Where the record has holes, we list them.
+            </p>
+            <div className="mt-8 max-w-xl">
+              <SearchBar />
+            </div>
+          </div>
+          <figure className="relative">
+            <Stepwell3D className="h-[300px] w-full sm:h-[420px] lg:h-[520px]" />
+            <figcaption className="mt-1 text-center text-[13px] text-paper/55">
+              A Gujarat stepwell, modelled in code. Drag to turn it.
+            </figcaption>
+          </figure>
+        </div>
+        <div className="kg-frieze kg-frieze-light" aria-hidden="true" />
+      </section>
+
+    <main className="mx-auto max-w-6xl px-4 pb-16 pt-10">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <h2 className="font-display text-3xl sm:text-4xl">The archive, by place</h2>
+        <p className="text-[15px] text-dust">Click a pin to open its record.</p>
       </div>
 
-      <section aria-label="Monuments" className="mt-8 grid gap-6 lg:grid-cols-[1fr_340px]">
-        <div className="relative h-[55vh] min-h-[340px] overflow-hidden rounded-md border border-line lg:h-[560px]">
+      <section aria-label="Monuments" className="mt-6 grid gap-6 lg:grid-cols-[1fr_340px]">
+        <div className="relative h-[55vh] min-h-[340px] overflow-hidden rounded-sm border-[6px] border-paper shadow-[0_0_0_1px_var(--color-line),0_10px_30px_rgb(42_36_29/0.15)] lg:h-[560px]">
           {state.kind === "error" ? (
             <div className="grid h-full place-items-center bg-paper p-6">
               <ErrorState title="Couldn't load the map" message={state.message} onRetry={load} />
@@ -64,7 +92,7 @@ export default function HomePage() {
 
         <div>
           <div className="flex items-baseline justify-between">
-            <h2 className="font-serif text-xl font-semibold">Monuments</h2>
+            <h3 className="font-display text-2xl">Monuments</h3>
             {state.kind === "ready" && <span className="text-sm text-dust">{entities.length} in the archive</span>}
           </div>
 
@@ -100,9 +128,10 @@ export default function HomePage() {
                 <li key={e.id}>
                   <Link
                     href={`/monument/${e.id}`}
-                    className="group block rounded-md border border-line bg-paper p-4 transition-colors hover:border-ink/40"
+                    className="group block rounded-sm border border-line bg-paper p-4 shadow-[3px_3px_0_var(--color-line)] transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-[4px_5px_0_var(--color-line)]"
                   >
-                    <span className="font-serif text-lg font-semibold group-hover:underline group-hover:underline-offset-4">
+                    <span className="block text-[12px] tracking-wide text-ochre">Record no. {String(e.id).padStart(3, "0")}</span>
+                    <span className="font-display text-xl group-hover:underline group-hover:underline-offset-4">
                       {e.name}
                     </span>
                     {(e.lat == null || e.lng == null) && (
@@ -132,5 +161,6 @@ export default function HomePage() {
         </div>
       </section>
     </main>
+    </>
   );
 }

@@ -8,12 +8,15 @@
   },
   "dependencies": {
     "@fontsource/hind": "^5.2.6",
+    "@fontsource/rozha-one": "^5.2.6",
     "@fontsource/spectral": "^5.2.6",
+    "@react-three/fiber": "^9.3.0",
     "leaflet": "^1.9.4",
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-leaflet": "^5.0.0"
+    "react-leaflet": "^5.0.0",
+    "three": "^0.178.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.0",
@@ -21,6 +24,7 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.178.1",
     "tailwindcss": "^4.1.0",
     "typescript": "^5"
   }
