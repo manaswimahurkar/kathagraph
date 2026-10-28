@@ -7,13 +7,16 @@
 // Loaded with dynamic(..., { ssr: false }) from WorldBackground, because WebGL only exists in the browser.
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { GUJARAT_OUTLINE, project } from "@/lib/geo";
-import { imageryUVs, loadImagery, MAP_STYLES, styleById, type Imagery, type MapStyle, type MapStyleId } from "@/lib/mapStyles";
+import { getEntity } from "@/lib/api";
+import { imageryUVs, loadImagery, MAP_BASES, resolveStyle, type Imagery, type MapStyle } from "@/lib/mapStyles";
+import { usePrefs, type MapBase } from "@/lib/prefs";
 import { buildTerrain, type ElevationSource, type Terrain } from "@/lib/terrain";
-import type { EntitySummary } from "@/lib/types";
+import { fieldLabel, type EntityDetail, type EntitySummary } from "@/lib/types";
+import { CountChips } from "./CountChips";
 
 export type MapView =
   | { kind: "home" }
@@ -71,6 +74,7 @@ const fragmentShader = /* glsl */ `
   uniform sampler2D uMap;
   uniform float uTexAmt; // 0 = ancient parchment, 1 = draped imagery
   uniform vec3 uEdge;
+  uniform vec3 uTint;
   varying vec2 vUv;
   varying float vElev;
   varying float vMask;
@@ -108,13 +112,26 @@ const fragmentShader = /* glsl */ `
     vec3 tex = texture2D(uMap, vUv).rgb * (0.72 + 0.45 * diff);
     c = mix(c, tex, uTexAmt);
 
+    c *= uTint;
     float edge = 1.0 - smoothstep(0.5, 0.64, vMask);
     c = mix(c, uEdge, edge * 0.85);
     gl_FragColor = vec4(c, 1.0);
   }
 `;
 
-function Relief({ terrain, calm, imagery, edge }: { terrain: Terrain; calm: boolean; imagery: Imagery | null; edge: string }) {
+function Relief({
+  terrain,
+  calm,
+  imagery,
+  edge,
+  tint,
+}: {
+  terrain: Terrain;
+  calm: boolean;
+  imagery: Imagery | null;
+  edge: string;
+  tint: [number, number, number];
+}) {
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(terrain.positions, 3));
@@ -137,6 +154,7 @@ function Relief({ terrain, calm, imagery, edge }: { terrain: Terrain; calm: bool
           uMap: { value: null as THREE.Texture | null },
           uTexAmt: { value: 0 },
           uEdge: { value: new THREE.Color(edge) },
+          uTint: { value: new THREE.Vector3(1, 1, 1) },
         },
       }),
     [calm],
@@ -159,6 +177,10 @@ function Relief({ terrain, calm, imagery, edge }: { terrain: Terrain; calm: bool
   }, [edge, material]);
 
   useFrame((_, dt) => {
+    // Ease the colour tint (used to dim the land in dark mode).
+    const tv = material.uniforms.uTint.value as THREE.Vector3;
+    const k = calm ? 1 : Math.min(1, dt * 3);
+    tv.set(tv.x + (tint[0] - tv.x) * k, tv.y + (tint[1] - tv.y) * k, tv.z + (tint[2] - tv.z) * k);
     // The land rises out of the slab when the elevation data arrives.
     const u = material.uniforms.uRise;
     if (u.value < 1) u.value = Math.min(1, u.value + dt * 0.45);
@@ -230,7 +252,17 @@ function Table({ style }: { style: MapStyle }) {
 }
 
 /** A beam of light and a pulsing ring over each monument. */
-function Markers({ points, heightAt, selected }: { points: Located[]; heightAt: (lon: number, lat: number) => number; selected: number | null }) {
+function Markers({
+  points,
+  heightAt,
+  selected,
+  onPick,
+}: {
+  points: Located[];
+  heightAt: (lon: number, lat: number) => number;
+  selected: number | null;
+  onPick?: (id: number) => void;
+}) {
   const rings = useRef<THREE.Mesh[]>([]);
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
@@ -249,7 +281,15 @@ function Markers({ points, heightAt, selected }: { points: Located[]; heightAt: 
         const on = selected === e.id;
         const color = e.n_conflicts > 0 ? "#e8a33c" : "#f3d27a";
         return (
-          <group key={e.id} position={[x, y, z]}>
+          <group
+            key={e.id}
+            position={[x, y, z]}
+            onClick={(ev) => {
+              if (!onPick || ev.delta > 5) return; // ignore the end of a drag
+              ev.stopPropagation();
+              onPick(e.id);
+            }}
+          >
             <mesh position={[0, on ? 2.4 : 1.6, 0]}>
               <cylinderGeometry args={[0.04, on ? 0.18 : 0.13, on ? 4.8 : 3.2, 12, 1, true]} />
               <meshBasicMaterial color={color} transparent opacity={on ? 0.85 : 0.6} blending={THREE.AdditiveBlending} depthWrite={false} />
@@ -375,8 +415,8 @@ function CameraRig({
         want.dist = u.dist;
         want.target.set(0, 0, 0);
         if (wide) {
-          // aim left of centre so Gujarat sits to the right of the side panel
-          const shift = want.dist * 0.17;
+          // aim slightly left of centre so Gujarat clears the search box
+          const shift = want.dist * 0.07;
           want.target.x -= Math.cos(want.az) * shift;
           want.target.z += Math.sin(want.az) * shift;
         } else {
@@ -465,7 +505,16 @@ function Projector({ pins }: { pins: React.RefObject<Pin[]> }) {
         }
         placed.push({ x, y, w });
       }
-      p.el.style.transform = `translate(-50%, -100%) translate(${x}px, ${y}px)`;
+      let px = x;
+      if (p.key === "popup") {
+        // The pop-up card sits above its monument's label, kept inside the screen;
+        // if there's no room above, it flips below the monument.
+        const w = p.el.offsetWidth;
+        const h = p.el.offsetHeight;
+        px = Math.min(Math.max(x, w / 2 + 12), size.width - w / 2 - 12);
+        y = y - 44 - h < 110 ? y + h + 24 : y - 44;
+      }
+      p.el.style.transform = `translate(-50%, -100%) translate(${px}px, ${y}px)`;
       p.el.style.opacity = visible ? "" : "0";
     }
   });
@@ -473,6 +522,8 @@ function Projector({ pins }: { pins: React.RefObject<Pin[]> }) {
 }
 
 // ---------------------------------------------------------------------------
+
+type Status = { kind: "idle" } | { kind: "loading" } | { kind: "error"; message: string };
 
 export default function GujaratMap3D({
   view,
@@ -483,21 +534,14 @@ export default function GujaratMap3D({
   entities: EntitySummary[];
   interactive: boolean;
 }) {
-  const router = useRouter();
+  const { base, theme, setBase } = usePrefs();
+  const style = resolveStyle(base, theme);
   const [terrain, setTerrain] = useState<Terrain | null>(null);
   const [source, setSource] = useState<ElevationSource | null>(null);
-  // The chosen style is remembered in this browser (this component only ever runs in the browser).
-  const [styleId, setStyleId] = useState<MapStyleId>(() => {
-    try {
-      const saved = localStorage.getItem("kg-map-style");
-      return MAP_STYLES.some((s) => s.id === saved) ? (saved as MapStyleId) : "ancient";
-    } catch {
-      return "ancient";
-    }
-  });
   const [imagery, setImagery] = useState<Imagery | null>(null);
-  const [status, setStatus] = useState<{ kind: "idle" } | { kind: "loading"; label: string } | { kind: "error"; message: string }>({ kind: "idle" });
-  const style = styleById(styleId);
+  const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const [picked, setPicked] = useState<number | null>(null);
+  const lastPick = useRef(0);
 
   const { lite, calm } = useMemo(() => {
     if (typeof window === "undefined") return { lite: false, calm: false };
@@ -519,43 +563,54 @@ export default function GujaratMap3D({
     };
   }, [lite]);
 
+  // Load the imagery for the chosen style (cached, so switching back is instant).
   useEffect(() => {
-    try {
-      localStorage.setItem("kg-map-style", styleId);
-    } catch {
-      /* ignore */
-    }
-    const st = styleById(styleId);
-    if (!st.tiles) {
+    if (!style.tiles) {
       setImagery(null);
-      // keep an error message visible for a few seconds, then clear it
-      const t = setTimeout(() => setStatus({ kind: "idle" }), 5000);
+      const t = setTimeout(() => setStatus({ kind: "idle" }), 5000); // let an error message linger
       setStatus((prev) => (prev.kind === "error" ? prev : { kind: "idle" }));
       return () => clearTimeout(t);
     }
     let alive = true;
-    setStatus({ kind: "loading", label: st.label });
-    loadImagery(st, lite ? 8 : 9)
+    setStatus({ kind: "loading" });
+    loadImagery(style, lite ? 8 : 9)
       .then((img) => {
         if (!alive) return;
         setImagery(img);
-        setStatus(img.missing > 0.2 ? { kind: "error", message: `Some ${st.label.toLowerCase()} tiles didn't load.` } : { kind: "idle" });
+        setStatus(img.missing > 0.2 ? { kind: "error", message: "Some map tiles didn't load." } : { kind: "idle" });
       })
       .catch((e: Error) => {
         if (!alive) return;
         setStatus({ kind: "error", message: `${e.message} Showing the Ancient style.` });
-        setStyleId("ancient");
+        setBase("ancient");
       });
     return () => {
       alive = false;
     };
-  }, [styleId, lite]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [style.tiles, lite]);
+
+  // The pop-up only exists on the home page; Escape closes it.
+  useEffect(() => {
+    if (!interactive) setPicked(null);
+  }, [interactive]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPicked(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const pick = (id: number) => {
+    lastPick.current = performance.now();
+    setPicked(id);
+  };
 
   const heightAt = terrain?.heightAt ?? (() => 0);
   const points = entities.filter((e): e is Located => e.lat != null && e.lng != null);
-  const selected = view.kind === "monument" ? view.id : null;
+  const selected = view.kind === "monument" ? view.id : picked;
+  const pickedEntity = points.find((e) => e.id === picked) ?? null;
 
-  // One list of everything pinned to the map: place names and monument labels.
+  // Everything pinned to the map: place names, monument labels, and the pop-up card.
   const pins = useRef<Pin[]>([]);
   const pinList = useMemo(() => {
     const list: Pin[] = PLACES.map((p) => {
@@ -567,18 +622,31 @@ export default function GujaratMap3D({
       const [x, z] = project(e.lng, e.lat);
       list.push({ key: `m-${e.id}`, pos: new THREE.Vector3(x, heightAt(e.lng, e.lat) + 0.25, z), el: null });
     }
+    if (pickedEntity) {
+      const [x, z] = project(pickedEntity.lng, pickedEntity.lat);
+      list.push({ key: "popup", pos: new THREE.Vector3(x, heightAt(pickedEntity.lng, pickedEntity.lat) + 0.25, z), el: null });
+    }
     return list;
     // heightAt changes identity when the terrain arrives
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [terrain, entities]);
+  }, [terrain, entities, pickedEntity]);
   pins.current = pinList;
   const pinRef = (key: string) => (el: HTMLElement | null) => {
     const p = pins.current.find((x) => x.key === key);
     if (p) p.el = el;
   };
 
+  const darkUi = style.land === "white" || style.theme === "dark";
+
   return (
-    <div className="absolute inset-0">
+    <div
+      className="absolute inset-0"
+      onClick={(e) => {
+        // A plain click on the map (not on a monument) closes the pop-up.
+        if (!interactive || e.target instanceof HTMLElement === false) return;
+        if ((e.target as HTMLElement).tagName === "CANVAS" && performance.now() - lastPick.current > 80) setPicked(null);
+      }}
+    >
       <Canvas
         dpr={lite ? 1 : [1, 1.75]}
         camera={{ fov: 34, near: 0.5, far: 400, position: [30, 60, 90] }}
@@ -590,15 +658,23 @@ export default function GujaratMap3D({
         <directionalLight position={[-30, 40, -20]} intensity={1.6} color="#ffd9a6" />
         <Table style={style} />
         <Slab style={style} />
-        {terrain && <Relief terrain={terrain} calm={calm} imagery={imagery} edge={style.id === "ancient" ? "#33200f" : style.wallSide} />}
-        <Markers points={points} heightAt={heightAt} selected={selected} />
+        {terrain && (
+          <Relief
+            terrain={terrain}
+            calm={calm}
+            imagery={imagery}
+            edge={style.base === "ancient" ? "#33200f" : style.wallSide}
+            tint={style.tint}
+          />
+        )}
+        <Markers points={points} heightAt={heightAt} selected={selected} onPick={interactive ? pick : undefined} />
         <CameraRig view={view} points={points} heightAt={heightAt} interactive={interactive} calm={calm} />
         <Projector pins={pins} />
       </Canvas>
 
-      {/* candle-lit vignette */}
+      {/* vignette: candle-lit in dark mode, a soft edge in light mode */}
       <div
-        className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ${style.labels === "dark" ? "opacity-30" : "opacity-100"} bg-[radial-gradient(ellipse_at_55%_45%,transparent_35%,rgb(12_8_5/0.75)_100%)]`}
+        className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ${style.theme === "light" ? "opacity-25" : "opacity-100"} bg-[radial-gradient(ellipse_at_55%_45%,transparent_35%,rgb(12_8_5/0.75)_100%)]`}
       />
 
       {/* labels */}
@@ -619,8 +695,12 @@ export default function GujaratMap3D({
             ref={pinRef(`m-${e.id}`)}
             type="button"
             tabIndex={interactive ? 0 : -1}
-            onClick={() => router.push(`/monument/${e.id}`)}
-            className={`absolute left-0 top-0 whitespace-nowrap rounded-sm border border-[#e8c27a]/60 bg-[#1f160e]/80 px-2.5 py-1 font-display text-[14px] text-[#f6e7c8] shadow-[0_4px_14px_rgb(0_0_0/0.4)] transition-[opacity,background-color] duration-300 hover:bg-[#3a2814] ${
+            aria-expanded={picked === e.id}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              pick(e.id);
+            }}
+            className={`absolute left-0 top-0 whitespace-nowrap rounded-sm border border-[#e8c27a]/60 bg-[#1f160e]/85 px-2.5 py-1 font-display text-[14px] text-[#f6e7c8] shadow-[0_4px_14px_rgb(0_0_0/0.4)] transition-[opacity,background-color] duration-300 hover:bg-[#3a2814] ${
               interactive ? "pointer-events-auto cursor-pointer" : ""
             } ${selected === e.id ? "ring-2 ring-[#e8a33c]" : ""}`}
           >
@@ -630,34 +710,47 @@ export default function GujaratMap3D({
         ))}
       </div>
 
-      {/* compass rose and data credits */}
-      <svg viewBox="0 0 100 100" aria-hidden="true" className="pointer-events-none absolute bottom-6 right-6 hidden size-20 text-[#c9a46a]/70 sm:block">
+      {interactive && pickedEntity && (
+        <MonumentPopup key={pickedEntity.id} entity={pickedEntity} elRef={pinRef("popup")} onClose={() => setPicked(null)} />
+      )}
+
+      {/* compass rose */}
+      <svg
+        viewBox="0 0 100 100"
+        aria-hidden="true"
+        className={`pointer-events-none absolute bottom-6 right-6 hidden size-20 sm:block ${darkUi ? "text-[#c9a46a]/70" : "text-[#5c3f25]/70"}`}
+      >
         <circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" strokeWidth="0.8" />
         <circle cx="50" cy="50" r="24" fill="none" stroke="currentColor" strokeWidth="0.4" />
         <path d="M50 8 L56 50 L50 92 L44 50 Z" fill="currentColor" opacity="0.85" />
         <path d="M8 50 L50 44 L92 50 L50 56 Z" fill="currentColor" opacity="0.5" />
-        <text x="50" y="6" textAnchor="middle" fontSize="9" fill="currentColor" fontFamily="serif">N</text>
+        <text x="50" y="6" textAnchor="middle" fontSize="9" fill="currentColor" fontFamily="serif">
+          N
+        </text>
       </svg>
+
       {interactive && (
         <>
           {/* cartouche: the map's title, in Gujarati and English */}
-          <div className="kg-cartouche pointer-events-none absolute right-10 top-[7.5rem] hidden text-center lg:block">
-            <p lang="gu" className={`font-gujarati text-2xl leading-none ${style.labels === "dark" ? "text-[#2b2118]" : "text-[#f3dfb8]"}`}>
+          <div
+            className={`kg-cartouche pointer-events-none absolute right-10 top-[7.5rem] hidden text-center transition-opacity duration-300 lg:block ${
+              pickedEntity ? "opacity-0" : ""
+            }`}
+          >
+            <p lang="gu" className={`font-gujarati text-2xl leading-none ${darkUi ? "text-[#f3dfb8]" : "text-[#2b2118]"}`}>
               ગુજરાત
             </p>
-            <p className={`mt-1 font-display text-lg tracking-[0.3em] uppercase ${style.labels === "dark" ? "text-[#6b4a1c]" : "text-[#e8c27a]"}`}>
-              Gujarat
-            </p>
-            <p className={`mt-0.5 font-serif text-[12px] italic ${style.labels === "dark" ? "text-[#4a3a2a]" : "text-[#c9a46a]/80"}`}>
-              Drag to turn · scroll to zoom
+            <p className={`mt-1 font-display text-lg tracking-[0.3em] uppercase ${darkUi ? "text-[#e8c27a]" : "text-[#6b4a1c]"}`}>Gujarat</p>
+            <p className={`mt-0.5 font-serif text-[12px] italic ${darkUi ? "text-[#c9a46a]/80" : "text-[#4a3a2a]"}`}>
+              Drag to turn · scroll to zoom · click a monument
             </p>
           </div>
-          <StyleSwitcher current={styleId} onChange={setStyleId} status={status} />
+          <StyleSwitcher current={base} onChange={setBase} status={status} />
         </>
       )}
 
       {source && (
-        <p className={`pointer-events-none absolute bottom-2 left-3 right-3 text-[11px] ${style.labels === "dark" ? "text-black/55" : "text-[#c9a46a]/60"}`}>
+        <p className={`pointer-events-none absolute bottom-2 left-3 right-3 text-[11px] ${darkUi ? "text-[#c9a46a]/60" : "text-black/55"}`}>
           {source === "srtm" ? "Elevation: NASA SRTM via AWS Terrain Tiles" : "Elevation approximated (live data unavailable)"} · Boundary:
           Census 2011 districts · Relief exaggerated 25×{style.attribution && ` · ${style.attribution}`}
         </p>
@@ -669,34 +762,28 @@ export default function GujaratMap3D({
 // ---------------------------------------------------------------------------
 
 function placeClass(style: MapStyle, kind: "sea" | "region" | "town") {
-  if (style.labels === "ancient") {
-    if (kind === "sea") return "text-[13px] tracking-[0.3em] uppercase text-[#c9a46a]/70";
-    if (kind === "region") return "text-[12px] tracking-[0.25em] uppercase text-[#4a3220]/80";
-    return "text-[12px] text-[#3a2616]/85";
-  }
-  const tone =
-    style.labels === "light"
-      ? "text-white/90 [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]"
-      : "text-[#263038]/85 [text-shadow:0_0_3px_rgb(255_255_255/0.9)]";
-  if (kind === "sea") return `text-[13px] tracking-[0.3em] uppercase ${tone} opacity-75`;
-  if (kind === "region") return `text-[12px] tracking-[0.25em] uppercase ${tone}`;
-  return `text-[12px] not-italic ${tone}`;
+  const tones = {
+    ink: "text-[#3a2616]/85",
+    white: "text-white/90 [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]",
+    slate: "text-[#263038]/85 [text-shadow:0_0_3px_rgb(255_255_255/0.9)]",
+    gold: "text-[#c9a46a]/75",
+    brown: "text-[#5c3f25]/80",
+  };
+  if (kind === "sea") return `text-[13px] tracking-[0.3em] uppercase ${tones[style.sea]}`;
+  if (kind === "region") return `text-[12px] tracking-[0.25em] uppercase ${tones[style.land]}`;
+  return `text-[12px] ${style.base === "ancient" ? "" : "not-italic"} ${tones[style.land]}`;
 }
 
-/** Layer switcher, like the one in Google Maps. */
-function StyleSwitcher({
-  current,
-  onChange,
-  status,
-}: {
-  current: MapStyleId;
-  onChange: (id: MapStyleId) => void;
-  status: { kind: "idle" } | { kind: "loading"; label: string } | { kind: "error"; message: string };
-}) {
+/** Layer switcher, like the one in Google Maps. Light/dark is in the site header. */
+function StyleSwitcher({ current, onChange, status }: { current: MapBase; onChange: (b: MapBase) => void; status: Status }) {
   return (
     <div className="pointer-events-auto absolute right-3 top-[7.5rem] flex flex-col items-end gap-2 sm:bottom-8 sm:right-28 sm:top-auto">
-      <div role="radiogroup" aria-label="Map style" className="flex rounded-md border border-[#b48c5c]/70 bg-[#1f160e]/85 p-0.5 shadow-[0_6px_20px_rgb(0_0_0/0.45)] backdrop-blur">
-        {MAP_STYLES.map((s) => (
+      <div
+        role="radiogroup"
+        aria-label="Map style"
+        className="flex rounded-md border border-[#b48c5c]/70 bg-[#1f160e]/85 p-0.5 shadow-[0_6px_20px_rgb(0_0_0/0.45)] backdrop-blur"
+      >
+        {MAP_BASES.map((s) => (
           <button
             key={s.id}
             type="button"
@@ -713,9 +800,103 @@ function StyleSwitcher({
       </div>
       {status.kind !== "idle" && (
         <p role="status" className="rounded bg-[#1f160e]/85 px-2.5 py-1 text-[12px] text-[#f3dfb8]">
-          {status.kind === "loading" ? `Loading ${status.label.toLowerCase()} imagery…` : status.message}
+          {status.kind === "loading" ? "Loading map imagery…" : status.message}
         </p>
       )}
+    </div>
+  );
+}
+
+/** The card that pops up when you click a monument on the map. */
+function MonumentPopup({
+  entity,
+  elRef,
+  onClose,
+}: {
+  entity: Located;
+  elRef: (el: HTMLElement | null) => void;
+  onClose: () => void;
+}) {
+  const [detail, setDetail] = useState<EntityDetail | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    getEntity(entity.id)
+      .then(setDetail)
+      .catch(() => setFailed(true));
+  }, [entity.id]);
+
+  // Headline facts: construction date and builder, showing every value when sources disagree.
+  const headline = ["built_date", "builder"].map((field) => {
+    const values = [...new Set((detail?.claims ?? []).filter((c) => c.field === field && c.status !== "rejected").map((c) => c.value))];
+    return { field, values };
+  });
+
+  return (
+    <div
+      ref={elRef}
+      role="dialog"
+      aria-label={entity.name}
+      onClick={(e) => e.stopPropagation()}
+      className="kg-panel kg-pop pointer-events-auto fixed inset-x-3 bottom-3 z-20 p-4 sm:absolute sm:inset-auto sm:left-0 sm:top-0 sm:w-[340px] max-sm:!transform-none max-sm:!opacity-100"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute right-2 top-2 grid size-8 place-items-center rounded text-dust hover:bg-ink/10 hover:text-ink"
+      >
+        ✕
+      </button>
+      <p className="text-[12px] tracking-wide text-ochre">Record no. {String(entity.id).padStart(3, "0")}</p>
+      <h2 className="pr-8 font-display text-2xl leading-tight text-ink">{entity.name}</h2>
+      {detail && detail.aliases.length > 0 && (
+        <p className="mt-0.5 text-[13px] text-dust">
+          {detail.aliases.map((a, i) => (
+            <span key={a.alias} lang={a.language ?? undefined}>
+              {i > 0 && ", "}
+              {a.alias}
+            </span>
+          ))}
+        </p>
+      )}
+
+      <dl className="mt-3 space-y-1.5 text-[14px]">
+        {!detail && !failed && (
+          <>
+            <div className="kg-skeleton h-4 w-3/4" />
+            <div className="kg-skeleton h-4 w-2/3" />
+          </>
+        )}
+        {failed && <p className="text-[13px] text-dust">Couldn&apos;t load the details. Open the record to try again.</p>}
+        {detail &&
+          headline.map(({ field, values }) => (
+            <div key={field} className="flex gap-2">
+              <dt className="w-24 shrink-0 text-dust">{fieldLabel(field)}</dt>
+              <dd className="font-serif text-ink">
+                {values.length === 0 ? (
+                  <span className="text-dust italic">not recorded yet</span>
+                ) : values.length > 1 ? (
+                  <>
+                    {values.join(" or ")} <span className="text-[12px] text-ochre">(sources disagree)</span>
+                  </>
+                ) : (
+                  values[0]
+                )}
+              </dd>
+            </div>
+          ))}
+      </dl>
+
+      <div className="mt-3">
+        <CountChips entity={entity} />
+      </div>
+      <Link
+        href={`/monument/${entity.id}`}
+        className="mt-4 block rounded-md bg-water px-4 py-2.5 text-center text-[15px] font-medium text-paper hover:opacity-90"
+      >
+        Open the full record
+      </Link>
     </div>
   );
 }

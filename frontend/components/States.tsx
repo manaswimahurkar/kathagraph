@@ -32,7 +32,7 @@ export function ErrorState({ title, message, onRetry }: { title: string; message
       {onRetry && (
         <button
           onClick={onRetry}
-          className="mt-3 rounded border border-rust/40 bg-paper px-3 py-1.5 text-sm font-medium text-rust hover:bg-white"
+          className="mt-3 rounded border border-rust/40 bg-paper px-3 py-1.5 text-sm font-medium text-rust hover:bg-sand"
         >
           Try again
         </button>

@@ -3,88 +3,75 @@
 
 import { TERRAIN_BBOX, tileXAt, tileYAt } from "./terrain";
 
-export type MapStyleId = "ancient" | "satellite" | "map" | "light" | "dark";
+import type { MapBase, Theme } from "./prefs";
 
 export interface MapStyle {
-  id: MapStyleId;
-  label: string;
+  key: string; // base + theme, e.g. "satellite-dark"
+  base: MapBase;
+  theme: Theme;
   /** Tile URL template ({s} subdomain, {z}/{x}/{y}); null for the ancient style. */
   tiles: string | null;
   attribution: string;
-  /** Colours around the map: background, the table it sits on, the slab's sides. */
+  /** Colours around the map: background, the table it sits on, its grid, and the slab's top and sides. */
   background: string;
   table: string;
   grid: string;
   wallTop: string;
   wallSide: string;
-  /** Whether labels on the map should be light (on dark imagery) or dark. */
-  labels: "ancient" | "light" | "dark";
+  /** Multiplies the land colour: used to dim satellite imagery for dark mode. */
+  tint: [number, number, number];
+  /** Text colour for names on the land, and for names over the sea/table. */
+  land: "ink" | "white" | "slate";
+  sea: "gold" | "brown" | "white" | "slate";
 }
 
-export const MAP_STYLES: MapStyle[] = [
-  {
-    id: "ancient",
-    label: "Ancient",
-    tiles: null,
-    attribution: "",
-    background: "#17110c",
-    table: "#1c150f",
-    grid: "#c9a46a",
-    wallTop: "#8a6a45",
-    wallSide: "#5c3f25",
-    labels: "ancient",
-  },
-  {
-    id: "satellite",
-    label: "Satellite",
-    tiles: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
-    background: "#06080b",
-    table: "#0b0f14",
-    grid: "#6f8aa3",
-    wallTop: "#3a3b33",
-    wallSide: "#24251f",
-    labels: "light",
-  },
-  {
-    id: "map",
-    label: "Map",
-    tiles: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
-    attribution: "© OpenStreetMap contributors © CARTO",
-    background: "#cfdde6",
-    table: "#aac8d9",
-    grid: "#ffffff",
-    wallTop: "#e4ddd0",
-    wallSide: "#b9ae9c",
-    labels: "dark",
-  },
-  {
-    id: "light",
-    label: "Light",
-    tiles: "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
-    attribution: "© OpenStreetMap contributors © CARTO",
-    background: "#eef0f1",
-    table: "#d9dee2",
-    grid: "#9aa5ae",
-    wallTop: "#f2f2f0",
-    wallSide: "#c9cbcc",
-    labels: "dark",
-  },
-  {
-    id: "dark",
-    label: "Dark",
-    tiles: "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
-    attribution: "© OpenStreetMap contributors © CARTO",
-    background: "#0b0d10",
-    table: "#101317",
-    grid: "#4b5560",
-    wallTop: "#2a2d31",
-    wallSide: "#16181b",
-    labels: "light",
-  },
+export const MAP_BASES: { id: MapBase; label: string }[] = [
+  { id: "ancient", label: "Ancient" },
+  { id: "satellite", label: "Satellite" },
+  { id: "map", label: "Map" },
 ];
 
-export const styleById = (id: MapStyleId) => MAP_STYLES.find((s) => s.id === id) ?? MAP_STYLES[0];
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const CARTO = (name: string) => `https://{s}.basemaps.cartocdn.com/rastertiles/${name}/{z}/{x}/{y}.png`;
+const OSM_CARTO = "© OpenStreetMap contributors © CARTO";
+
+const STYLES: Record<string, Omit<MapStyle, "key" | "base" | "theme">> = {
+  "ancient-dark": {
+    tiles: null, attribution: "",
+    background: "#17110c", table: "#1c150f", grid: "#c9a46a", wallTop: "#8a6a45", wallSide: "#5c3f25",
+    tint: [1, 1, 1], land: "ink", sea: "gold",
+  },
+  "ancient-light": {
+    tiles: null, attribution: "",
+    background: "#e8dcc4", table: "#dccdb0", grid: "#8a6a45", wallTop: "#a8875c", wallSide: "#7a5a38",
+    tint: [1, 1, 1], land: "ink", sea: "brown",
+  },
+  "satellite-dark": {
+    tiles: ESRI, attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
+    background: "#06080b", table: "#0b0f14", grid: "#6f8aa3", wallTop: "#2c2e2a", wallSide: "#1a1b18",
+    tint: [0.62, 0.68, 0.82], land: "white", sea: "white",
+  },
+  "satellite-light": {
+    tiles: ESRI, attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
+    background: "#d9e1e7", table: "#c4cfd8", grid: "#7d8d9a", wallTop: "#5b5a50", wallSide: "#3f3e37",
+    tint: [1, 1, 1], land: "white", sea: "slate",
+  },
+  "map-dark": {
+    tiles: CARTO("dark_nolabels"), attribution: OSM_CARTO,
+    background: "#0b0d10", table: "#101317", grid: "#4b5560", wallTop: "#2a2d31", wallSide: "#16181b",
+    tint: [1, 1, 1], land: "white", sea: "white",
+  },
+  "map-light": {
+    tiles: CARTO("voyager_nolabels"), attribution: OSM_CARTO,
+    background: "#d6e4ec", table: "#b5d0de", grid: "#ffffff", wallTop: "#e4ddd0", wallSide: "#b9ae9c",
+    tint: [1, 1, 1], land: "slate", sea: "slate",
+  },
+};
+
+export function resolveStyle(base: MapBase, theme: Theme): MapStyle {
+  const key = `${base}-${theme}`;
+  return { key, base, theme, ...STYLES[key] };
+}
 
 /** The stitched imagery for one style, plus how to map a longitude/latitude onto it. */
 export interface Imagery {
@@ -119,7 +106,7 @@ const cache = new Map<string, Promise<Imagery>>();
 
 /** Downloads and stitches the tiles covering Gujarat. Cached per style and zoom. */
 export function loadImagery(style: MapStyle, zoom: number): Promise<Imagery> {
-  const key = `${style.id}@${zoom}`;
+  const key = `${style.tiles}@${zoom}`;
   const hit = cache.get(key);
   if (hit) return hit;
 
@@ -155,7 +142,7 @@ export function loadImagery(style: MapStyle, zoom: number): Promise<Imagery> {
     }
     const results = await Promise.allSettled(jobs);
     const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed === results.length) throw new Error(`${style.label} imagery couldn't be loaded.`);
+    if (failed === results.length) throw new Error("The map imagery couldn't be loaded.");
     return { canvas, zoom, x0, y0, cols, rows, missing: failed / results.length };
   })();
 

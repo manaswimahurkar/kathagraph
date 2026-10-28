@@ -285,8 +285,39 @@ export async function upload(files: File[]): Promise<UploadResponse> {
   };
 }
 
+// Demo photos: real, freely licensed photos of these stepwells from Wikimedia Commons,
+// loaded in the browser. Each stepwell's lead photo comes from its Wikipedia page summary.
+const COMMONS = (file: string) => `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=1200`;
+const DEMO_PHOTOS: Record<number, { wiki?: string; url?: string }> = {
+  103: { wiki: "Adalaj_Stepwell" },
+  202: { wiki: "Rani_ki_Vav" },
+  203: { url: COMMONS("Rani ki vav - Patan - Gujarat - Wall Decorations.jpg") },
+  302: { wiki: "Dada_Harir_Stepwell" },
+};
+
+async function demoPhotoUrl(sourceId: number): Promise<string | null> {
+  const p = DEMO_PHOTOS[sourceId];
+  if (!p) return null;
+  if (p.url) return p.url;
+  try {
+    const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${p.wiki}`);
+    const body = await res.json();
+    return body?.originalimage?.source ?? body?.thumbnail?.source ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getSource(id: number): Promise<SourceDetail> {
   await delay(200);
+  const archived = SOURCES.find((s) => s.id === id);
+  if (archived) {
+    return {
+      id, filename: archived.filename, type: archived.type, status: "done", error: null,
+      lat: archived.lat, lng: archived.lng,
+      file_url: archived.type === "photo" ? await demoPhotoUrl(id) : null,
+    };
+  }
   const u = UPLOADS.get(id);
   if (!u) throw new MockHttpError(404, `No source with id ${id}.`);
   u.polls += 1;

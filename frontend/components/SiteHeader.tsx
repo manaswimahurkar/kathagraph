@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { USE_MOCK } from "@/lib/api";
+import { usePrefs } from "@/lib/prefs";
 
 const NAV = [
   { href: "/", label: "Map" },
@@ -22,6 +23,7 @@ export function StepsMark({ className = "" }: { className?: string }) {
 
 export default function SiteHeader() {
   const pathname = usePathname();
+  const { theme, setTheme } = usePrefs();
   return (
     <header className="sticky top-0 z-[1000] bg-paper/85 backdrop-blur supports-[backdrop-filter]:bg-paper/75">
       {USE_MOCK && (
@@ -55,6 +57,26 @@ export default function SiteHeader() {
                 </li>
               );
             })}
+            <li>
+              <button
+                type="button"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                title={theme === "dark" ? "Light mode" : "Dark mode"}
+                className="ml-1 grid size-9 place-items-center rounded text-dust hover:bg-sand hover:text-ink"
+              >
+                {theme === "dark" ? (
+                  <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4.5" />
+                    <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                    <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />
+                  </svg>
+                )}
+              </button>
+            </li>
           </ul>
         </nav>
       </div>

@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import PhotoGallery from "@/components/PhotoGallery";
+import SiteWalkthrough from "@/components/SiteWalkthrough";
 import { EmptyState, ErrorState, Skeleton } from "@/components/States";
 import { ApiError, getEntity, setClaimStatus } from "@/lib/api";
+import { comparisonRows, corroborated, fieldOnly, MONUMENT_CHECKLIST, summarise } from "@/lib/insights";
 import { fieldLabel, tagLabel, type Claim, type ClaimStatus, type EntityDetail } from "@/lib/types";
 
 type State =
@@ -111,14 +114,29 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
             {entity.conflicts.length} {entity.conflicts.length === 1 ? "disagreement" : "disagreements"}
           </JumpLink>
           <JumpLink href="#missing">{entity.gaps.length} missing</JumpLink>
+          {entity.lat != null && <JumpLink href="#visit">Walk through</JumpLink>}
           <JumpLink href="#sources">{entity.sources.length} sources</JumpLink>
+          <JumpLink href="#contribute">Add material</JumpLink>
         </nav>
       </header>
 
+      <PhotoGallery sources={entity.sources} citation={citation} />
+      <AtAGlance entity={entity} />
+      <FieldOnly entity={entity} citation={citation} />
       <KnownFacts claims={entity.claims} citation={citation} disputed={disputed} onChanged={onChanged} />
       <Disagreements entity={entity} citation={citation} />
       <MissingDocs entity={entity} />
+      {entity.lat != null && entity.lng != null && (
+        <Section
+          id="visit"
+          title="Walk through the site"
+          intro="Explore the monument in Google Street View or from above, as it looks today."
+        >
+          <SiteWalkthrough name={entity.name} lat={entity.lat} lng={entity.lng} />
+        </Section>
+      )}
       <SourceList entity={entity} />
+      <Contribute entity={entity} />
     </article>
   );
 }
@@ -308,70 +326,217 @@ function FactRow({ claim, n, disputed, onChanged }: { claim: Claim; n?: number; 
   );
 }
 
-// ---------- Sources disagree ----------
+// ---------- Sources disagree: side-by-side comparison ----------
+
+const ANSWER_STYLE = ["bg-ochre-soft text-ochre", "bg-water-soft text-water", "bg-rust-soft text-rust", "bg-sand text-ink"];
 
 function Disagreements({ entity, citation }: { entity: EntityDetail; citation: Map<number, number> }) {
   return (
     <Section
       id="disagreements"
       title="Sources disagree"
-      intro="Where two sources give different answers, both are shown. KathaGraph doesn't pick a winner; verify or reject the facts above to settle it."
+      intro="Where sources give different answers, each one is compared side by side. KathaGraph doesn't pick a winner: verify or reject the facts above to settle it."
     >
       {entity.conflicts.length === 0 ? (
         <EmptyState title="No disagreements between sources">
           Sources that mention the same detail give the same answer (rejected facts are left out).
         </EmptyState>
       ) : (
-        <div className="space-y-6">
-          {entity.conflicts.map((conflict) => (
-            <div key={conflict.field} className="rounded-md border border-ochre/35 bg-ochre-soft/50 p-4 sm:p-5">
-              <h3 className="font-medium text-ochre">
-                {fieldLabel(conflict.field)}: {conflict.claims.length} sources, {new Set(conflict.claims.map((c) => c.value)).size} different answers
-              </h3>
-              <div className="mt-4 flex flex-col items-stretch gap-3 sm:flex-row">
-                {conflict.claims.map((c, i) => (
-                  <div key={c.claim_id} className="contents">
-                    {i > 0 && (
-                      <div aria-hidden="true" className="grid place-items-center font-serif text-3xl text-ochre sm:px-1">
-                        ≠
-                      </div>
-                    )}
-                    <figure className="flex-1 rounded border border-line bg-paper p-4">
-                      <p className="font-display text-4xl">{c.value}</p>
-                      <figcaption className="mt-2 text-sm text-dust">
-                        according to <span className="text-ink">{c.source.filename}</span>{" "}
-                        <Cite sourceId={c.source.id} n={citation.get(c.source.id)} />
-                      </figcaption>
-                    </figure>
-                  </div>
-                ))}
+        <div className="space-y-8">
+          {entity.conflicts.map((conflict) => {
+            const rows = comparisonRows(entity, conflict.field);
+            const answers = [...new Set(rows.map((r) => r.value))];
+            return (
+              <div key={conflict.field}>
+                <h3 className="font-medium text-ochre">
+                  {fieldLabel(conflict.field)}: {rows.length} sources, {answers.length} different answers
+                </h3>
+                <p className="mt-1 flex flex-wrap items-center gap-2 font-display text-2xl sm:text-3xl">
+                  {answers.map((a, i) => (
+                    <span key={a} className="flex items-center gap-2">
+                      {i > 0 && <span className="font-serif text-xl text-ochre" aria-label="versus">≠</span>}
+                      <span className={`rounded-sm px-2 py-0.5 ${ANSWER_STYLE[i % ANSWER_STYLE.length]}`}>{a}</span>
+                    </span>
+                  ))}
+                </p>
+                <div className="mt-3 overflow-x-auto rounded-sm border border-line">
+                  <table className="w-full min-w-[560px] text-left text-[14px]">
+                    <caption className="sr-only">Comparison of sources for {fieldLabel(conflict.field)}</caption>
+                    <thead className="bg-sand/60 text-[13px] text-dust">
+                      <tr>
+                        <th scope="col" className="px-3 py-2 font-medium">Answer</th>
+                        <th scope="col" className="px-3 py-2 font-medium">Source</th>
+                        <th scope="col" className="px-3 py-2 font-medium">Kind</th>
+                        <th scope="col" className="px-3 py-2 font-medium">How it was read</th>
+                        <th scope="col" className="px-3 py-2 font-medium">Confidence</th>
+                        <th scope="col" className="px-3 py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {rows.map((r) => (
+                        <tr key={`${r.source.id}-${r.value}`}>
+                          <td className="px-3 py-2.5">
+                            <span className={`rounded-sm px-2 py-0.5 font-serif text-[16px] ${ANSWER_STYLE[r.answer % ANSWER_STYLE.length]}`}>
+                              {r.value}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="break-all">{r.source.filename}</span>{" "}
+                            <Cite sourceId={r.source.id} n={citation.get(r.source.id)} page={r.claim?.source.page} />
+                          </td>
+                          <td className="px-3 py-2.5 text-dust">{r.source.type ? TYPE_LABEL[r.source.type] : "–"}</td>
+                          <td className="px-3 py-2.5 text-dust">{r.claim ? METHOD_LABEL[r.claim.method] : "–"}</td>
+                          <td className="px-3 py-2.5 text-dust">
+                            {r.claim?.confidence != null ? `${Math.round(r.claim.confidence * 100)}%` : "–"}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            {r.claim ? (
+                              <span className={`rounded-full px-2 py-0.5 text-[12px] font-medium ${STATUS_STYLE[r.claim.status]}`}>
+                                {r.claim.status}
+                              </span>
+                            ) : (
+                              "–"
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {rows.some((r) => r.claim?.evidence_text) && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-[13px] text-water">Compare the original passages</summary>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {rows
+                        .filter((r) => r.claim?.evidence_text)
+                        .map((r) => (
+                          <blockquote
+                            key={r.source.id}
+                            className="border-l-2 border-line pl-3 font-serif text-[15px] italic leading-relaxed text-ink/85"
+                          >
+                            {r.claim!.evidence_text}
+                            <footer className="mt-1 text-[12px] not-italic text-dust">{r.source.filename}</footer>
+                          </blockquote>
+                        ))}
+                    </div>
+                  </details>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </Section>
   );
 }
 
-// ---------- Missing documentation ----------
+// ---------- Missing documentation: the full checklist ----------
 
 function MissingDocs({ entity }: { entity: EntityDetail }) {
+  const missing = new Set(entity.gaps.map((g) => g.required_item));
+  // Items the backend reports that aren't in our standard list still show as missing.
+  const extra = entity.gaps.filter((g) => !MONUMENT_CHECKLIST.some((i) => i.required_item === g.required_item));
+  const items = [...MONUMENT_CHECKLIST, ...extra];
+  const done = items.filter((i) => !missing.has(i.required_item)).length;
   return (
     <Section
       id="missing"
       title="Missing documentation"
-      intro="Compared against the archive's checklist for a monument. Take this list on the next field visit."
+      intro="What a complete record of a monument should include, and what this one still lacks. Take the unticked items on the next field visit."
     >
-      {entity.gaps.length === 0 ? (
-        <EmptyState title="Nothing missing">This monument has everything on the checklist.</EmptyState>
+      <p className="mb-3 text-[15px]">
+        <span className="font-display text-2xl">
+          {done} of {items.length}
+        </span>{" "}
+        <span className="text-dust">documented</span>
+      </p>
+      <div className="mb-4 h-2 overflow-hidden rounded-full bg-line" aria-hidden="true">
+        <div className="h-full rounded-full bg-water" style={{ width: `${(done / items.length) * 100}%` }} />
+      </div>
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {items.map((i) => {
+          const have = !missing.has(i.required_item);
+          return (
+            <li
+              key={i.required_item}
+              className={`flex items-center gap-3 rounded-md border px-4 py-3 ${
+                have ? "border-line bg-paper" : "border-dashed border-dust/50 bg-paper/60"
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className={`grid size-5 shrink-0 place-items-center rounded-[3px] border-2 text-[12px] ${
+                  have ? "border-water bg-water text-paper" : "border-dust/70"
+                }`}
+              >
+                {have ? "✓" : ""}
+              </span>
+              <span className={have ? "text-dust" : "text-[16px]"}>{i.label}</span>
+              <span className="sr-only">{have ? "(documented)" : "(missing)"}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </Section>
+  );
+}
+
+// ---------- At a glance: patterns across the record ----------
+
+const TYPE_PLURAL: Record<string, [string, string]> = {
+  photo: ["photo", "photos"],
+  pdf: ["scanned document", "scanned documents"],
+  note: ["field note", "field notes"],
+  csv: ["spreadsheet", "spreadsheets"],
+};
+
+function AtAGlance({ entity }: { entity: EntityDetail }) {
+  const s = summarise(entity);
+  const agree = corroborated(entity);
+  const pct = s.facts ? Math.round((s.verified / s.facts) * 100) : 0;
+  return (
+    <Section id="glance" title="At a glance" intro="What the archive can say about this monument as a whole, worked out from its facts and files.">
+      <dl className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-sm border border-line bg-paper p-4">
+          <dt className="text-[13px] text-dust">Checked by a researcher</dt>
+          <dd className="mt-1 font-display text-3xl">
+            {s.verified}
+            <span className="font-serif text-lg text-dust"> of {s.facts} facts</span>
+          </dd>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line" aria-hidden="true">
+            <div className="h-full bg-water" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+        <div className="rounded-sm border border-line bg-paper p-4">
+          <dt className="text-[13px] text-dust">Disputed details</dt>
+          <dd className="mt-1 font-display text-3xl">
+            {s.disputedFields}
+            <span className="font-serif text-lg text-dust">
+              {" "}
+              {s.disputedFields === 1 ? "detail" : "details"} with conflicting answers
+            </span>
+          </dd>
+        </div>
+        <div className="rounded-sm border border-line bg-paper p-4">
+          <dt className="text-[13px] text-dust">Evidence on file</dt>
+          <dd className="mt-1 text-[15px] leading-relaxed">
+            {Object.entries(s.sourceTypes)
+              .map(([t, n]) => `${n} ${TYPE_PLURAL[t]?.[n === 1 ? 0 : 1] ?? t}`)
+              .join(", ") || "None yet"}
+          </dd>
+        </div>
+      </dl>
+
+      <h3 className="mt-6 font-medium">Confirmed by more than one source</h3>
+      {agree.length === 0 ? (
+        <p className="mt-1 text-[15px] text-dust">No detail is backed by two independent sources yet.</p>
       ) : (
-        <ul className="space-y-2">
-          {entity.gaps.map((g) => (
-            <li key={g.required_item} className="flex items-center gap-3 rounded-md border border-dashed border-dust/50 bg-paper/60 px-4 py-3">
-              <span aria-hidden="true" className="size-4 shrink-0 rounded-[3px] border-2 border-dust/70" />
-              <span className="text-[16px]">{g.label}</span>
-              <span className="sr-only">(missing)</span>
+        <ul className="mt-2 space-y-1.5">
+          {agree.map((a) => (
+            <li key={`${a.field}-${a.value}`} className="flex flex-wrap items-baseline gap-x-2 text-[15px]">
+              <span className="text-dust">{fieldLabel(a.field)}:</span>
+              <span className="font-serif text-[17px]">{a.value}</span>
+              <span className="rounded-full bg-water-soft px-2 py-0.5 text-[12px] font-medium text-water">{a.sources} sources agree</span>
             </li>
           ))}
         </ul>
@@ -379,6 +544,73 @@ function MissingDocs({ entity }: { entity: EntityDetail }) {
     </Section>
   );
 }
+
+// ---------- Lesser-known details ----------
+
+function FieldOnly({ entity, citation }: { entity: EntityDetail; citation: Map<number, number> }) {
+  const items = fieldOnly(entity);
+  if (items.length === 0) return null;
+  return (
+    <Section
+      id="lesser-known"
+      title="Found only in our field records"
+      intro="These details come only from the team's own field notes and photos, not from any scanned report or published document. Some may be lesser known; none should be repeated as fact until verified."
+    >
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {items.map(({ claim, flagged }) => (
+          <li key={claim.id} className="rounded-sm border border-ochre/30 bg-ochre-soft/40 p-4">
+            <p className="text-[13px] text-dust">{fieldLabel(claim.field)}</p>
+            <p className="mt-0.5 font-serif text-xl">
+              {claim.value} <Cite sourceId={claim.source.id} n={citation.get(claim.source.id)} page={claim.source.page} />
+            </p>
+            <p className="mt-1.5 flex flex-wrap gap-1.5 text-[12px]">
+              {flagged && <span className="rounded-full bg-ochre px-2 py-0.5 font-medium text-paper">Rarely documented elsewhere</span>}
+              <span className={`rounded-full px-2 py-0.5 font-medium ${STATUS_STYLE[claim.status]}`}>{claim.status}</span>
+            </p>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
+// ---------- Contribute ----------
+
+function Contribute({ entity }: { entity: EntityDetail }) {
+  return (
+    <Section
+      id="contribute"
+      title="Have something new about this monument?"
+      intro="The archive grows from material that doesn't exist anywhere else yet."
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-sm border border-water/30 bg-water-soft/50 p-4">
+          <p className="font-medium text-water">Please do upload</p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[15px]">
+            <li>photos you took yourself, especially of what&apos;s missing above</li>
+            <li>field notes, sketches or measurements you made</li>
+            <li>family or community documents that have never been published</li>
+          </ul>
+        </div>
+        <div className="rounded-sm border border-rust/30 bg-rust-soft/50 p-4">
+          <p className="font-medium text-rust">Please don&apos;t upload</p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[15px]">
+            <li>anything already listed in this record&apos;s sources</li>
+            <li>photos or text copied from websites, Wikipedia or books</li>
+            <li>anything you don&apos;t have the right to share</li>
+          </ul>
+        </div>
+      </div>
+      <Link
+        href={`/upload?monument=${entity.id}`}
+        className="mt-4 inline-block rounded-md bg-water px-5 py-2.5 text-[15px] font-medium text-paper hover:opacity-90"
+      >
+        Add new material about {entity.name}
+      </Link>
+    </Section>
+  );
+}
+
 
 // ---------- Sources ----------
 
