@@ -21,6 +21,7 @@ export interface Terrain {
   positions: Float32Array; // x, y, z per vertex
   elevation: Float32Array; // metres per vertex
   mask: Float32Array; // 1 inside Gujarat, 0 outside
+  lonlat: Float32Array; // longitude, latitude per vertex (for draping map imagery)
   indices: Uint32Array;
   /** Height in map units at any longitude/latitude. */
   heightAt: (lon: number, lat: number) => number;
@@ -35,12 +36,17 @@ const bbox = {
 };
 
 // ---------- web-mercator tile maths ----------
-const n = 2 ** ZOOM;
-const tileX = (lon: number) => ((lon + 180) / 360) * n;
-const tileY = (lat: number) => {
+/** Tile coordinates (fractional) of a longitude / latitude at a zoom level. */
+export const tileXAt = (lon: number, zoom: number) => ((lon + 180) / 360) * 2 ** zoom;
+export const tileYAt = (lat: number, zoom: number) => {
   const r = (lat * Math.PI) / 180;
-  return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n;
+  return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * 2 ** zoom;
 };
+const tileX = (lon: number) => tileXAt(lon, ZOOM);
+const tileY = (lat: number) => tileYAt(lat, ZOOM);
+
+/** The padded area the terrain covers, in degrees. */
+export const TERRAIN_BBOX = bbox;
 
 function loadImage(url: string, timeoutMs: number): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -194,6 +200,7 @@ export async function buildTerrain(detail: "full" | "lite"): Promise<Terrain> {
   const nz = Math.round(nx * ((bbox.north - bbox.south) / (bbox.east - bbox.west)) * 1.08);
   const positions = new Float32Array(nx * nz * 3);
   const elevation = new Float32Array(nx * nz);
+  const lonlat = new Float32Array(nx * nz * 2);
   const mask = rasteriseMask(nx, nz);
 
   for (let j = 0; j < nz; j++) {
@@ -204,6 +211,8 @@ export async function buildTerrain(detail: "full" | "lite"): Promise<Terrain> {
       const e = Math.max(0, sample(lon, lat));
       const [x, z] = project(lon, lat);
       elevation[k] = e;
+      lonlat[k * 2] = lon;
+      lonlat[k * 2 + 1] = lat;
       positions[k * 3] = x;
       positions[k * 3 + 1] = e * EXAG;
       positions[k * 3 + 2] = z;
@@ -229,6 +238,7 @@ export async function buildTerrain(detail: "full" | "lite"): Promise<Terrain> {
     positions,
     elevation,
     mask,
+    lonlat,
     indices: new Uint32Array(idx),
     heightAt: (lon, lat) => Math.max(0, sample(lon, lat)) * EXAG,
     source,

@@ -16,15 +16,6 @@ export default function HomePage() {
 
   return (
     <div className="relative flex min-h-[calc(100svh-6.5rem)] flex-col justify-end px-3 pb-3 lg:block lg:px-6 lg:pb-0 lg:pt-6">
-      {/* cartouche: the map's title, in Gujarati and English */}
-      <div className="kg-cartouche pointer-events-none absolute left-1/2 top-4 hidden -translate-x-1/2 text-center lg:left-auto lg:right-10 lg:block lg:translate-x-0">
-        <p lang="gu" className="font-gujarati text-2xl leading-none text-[#f3dfb8]">
-          ગુજરાત
-        </p>
-        <p className="mt-1 font-display text-lg tracking-[0.3em] text-[#e8c27a] uppercase">Gujarat</p>
-        <p className="mt-0.5 font-serif text-[12px] italic text-[#c9a46a]/80">Drag to turn · scroll to zoom</p>
-      </div>
-
       <aside className="kg-panel kg-rise-1 flex max-h-[46svh] w-full flex-col lg:max-h-[calc(100svh-9rem)] lg:w-[400px]">
         <div className="shrink-0 border-b border-line/70 p-4 sm:p-5 sm:pb-4">
           <h1 className="font-display text-[1.5rem] leading-[1.1] sm:text-[1.9rem]">What do we actually know about each monument?</h1>

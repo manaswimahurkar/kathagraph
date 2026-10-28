@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { GUJARAT_OUTLINE, project } from "@/lib/geo";
+import { imageryUVs, loadImagery, MAP_STYLES, styleById, type Imagery, type MapStyle, type MapStyleId } from "@/lib/mapStyles";
 import { buildTerrain, type ElevationSource, type Terrain } from "@/lib/terrain";
 import type { EntitySummary } from "@/lib/types";
 
@@ -52,7 +53,9 @@ const vertexShader = /* glsl */ `
   varying float vMask;
   varying vec3 vNormal;
   varying vec3 vPos;
+  varying vec2 vUv;
   void main() {
+    vUv = uv;
     vec3 p = position;
     p.y = p.y * uRise + 0.02;
     vElev = elev * uRise;
@@ -65,6 +68,10 @@ const vertexShader = /* glsl */ `
 
 const fragmentShader = /* glsl */ `
   uniform vec3 uLight;
+  uniform sampler2D uMap;
+  uniform float uTexAmt; // 0 = ancient parchment, 1 = draped imagery
+  uniform vec3 uEdge;
+  varying vec2 vUv;
   varying float vElev;
   varying float vMask;
   varying vec3 vNormal;
@@ -95,20 +102,25 @@ const fragmentShader = /* glsl */ `
     vec3 ink = vec3(0.30, 0.19, 0.10);
     c = mix(c, ink, (contour(vElev, 50.0) * 0.2 + contour(vElev, 250.0) * 0.38) * show);
 
-    float edge = 1.0 - smoothstep(0.5, 0.64, vMask);
-    c = mix(c, vec3(0.20, 0.12, 0.07), edge * 0.9);
-
     c *= 0.95 + 0.1 * hash(floor(vPos.xz * 70.0));
+
+    // Imagery styles: the map image, lit by the same sun so the relief still reads in 3D.
+    vec3 tex = texture2D(uMap, vUv).rgb * (0.72 + 0.45 * diff);
+    c = mix(c, tex, uTexAmt);
+
+    float edge = 1.0 - smoothstep(0.5, 0.64, vMask);
+    c = mix(c, uEdge, edge * 0.85);
     gl_FragColor = vec4(c, 1.0);
   }
 `;
 
-function Relief({ terrain, calm }: { terrain: Terrain; calm: boolean }) {
+function Relief({ terrain, calm, imagery, edge }: { terrain: Terrain; calm: boolean; imagery: Imagery | null; edge: string }) {
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(terrain.positions, 3));
     g.setAttribute("elev", new THREE.BufferAttribute(terrain.elevation, 1));
     g.setAttribute("mask", new THREE.BufferAttribute(terrain.mask, 1));
+    g.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(terrain.mask.length * 2), 2));
     g.setIndex(new THREE.BufferAttribute(terrain.indices, 1));
     g.computeVertexNormals();
     return g;
@@ -122,15 +134,38 @@ function Relief({ terrain, calm }: { terrain: Terrain; calm: boolean }) {
         uniforms: {
           uRise: { value: calm ? 1 : 0 },
           uLight: { value: new THREE.Vector3(-0.55, 0.75, -0.35).normalize() },
+          uMap: { value: null as THREE.Texture | null },
+          uTexAmt: { value: 0 },
+          uEdge: { value: new THREE.Color(edge) },
         },
       }),
     [calm],
   );
 
-  // The land rises out of the slab when the elevation data arrives.
+  // Drape new imagery: work out where each vertex falls on the image, then fade it in.
+  useEffect(() => {
+    if (!imagery) return;
+    geometry.setAttribute("uv", new THREE.BufferAttribute(imageryUVs(terrain.lonlat, imagery), 2));
+    const tex = new THREE.CanvasTexture(imagery.canvas);
+    tex.anisotropy = 8;
+    tex.colorSpace = THREE.NoColorSpace; // the shader writes these colours straight out
+    const old = material.uniforms.uMap.value as THREE.Texture | null;
+    material.uniforms.uMap.value = tex;
+    old?.dispose();
+  }, [imagery, geometry, material, terrain]);
+
+  useEffect(() => {
+    (material.uniforms.uEdge.value as THREE.Color).set(edge);
+  }, [edge, material]);
+
   useFrame((_, dt) => {
+    // The land rises out of the slab when the elevation data arrives.
     const u = material.uniforms.uRise;
     if (u.value < 1) u.value = Math.min(1, u.value + dt * 0.45);
+    // Cross-fade between parchment and imagery when the style changes.
+    const t = material.uniforms.uTexAmt;
+    const want = imagery ? 1 : 0;
+    t.value = calm ? want : t.value + (want - t.value) * Math.min(1, dt * 3);
   });
 
   useEffect(() => () => geometry.dispose(), [geometry]);
@@ -138,7 +173,7 @@ function Relief({ terrain, calm }: { terrain: Terrain; calm: boolean }) {
 }
 
 /** The state as a carved slab: its sides are what you see at the coast and borders. */
-function Slab() {
+function Slab({ style }: { style: MapStyle }) {
   const geometry = useMemo(() => {
     const shapes = GUJARAT_OUTLINE.map((ring) => {
       const s = new THREE.Shape();
@@ -156,14 +191,14 @@ function Slab() {
   }, []);
   return (
     <mesh geometry={geometry}>
-      <meshStandardMaterial attach="material-0" color="#8a6a45" roughness={1} />
-      <meshStandardMaterial attach="material-1" color="#5c3f25" roughness={1} />
+      <meshStandardMaterial attach="material-0" color={style.wallTop} roughness={1} />
+      <meshStandardMaterial attach="material-1" color={style.wallSide} roughness={1} />
     </mesh>
   );
 }
 
 /** Dark table under the map, with a degree grid like an old chart. */
-function Table() {
+function Table({ style }: { style: MapStyle }) {
   const lines = useMemo(() => {
     const pts: number[] = [];
     const y = -0.88;
@@ -185,10 +220,10 @@ function Table() {
     <>
       <mesh rotation-x={-Math.PI / 2} position={[0, -0.9, 0]}>
         <planeGeometry args={[400, 400]} />
-        <meshStandardMaterial color="#1c150f" roughness={1} />
+        <meshStandardMaterial color={style.table} roughness={1} />
       </mesh>
       <lineSegments geometry={lines}>
-        <lineBasicMaterial color="#c9a46a" transparent opacity={0.2} />
+        <lineBasicMaterial color={style.grid} transparent opacity={0.22} />
       </lineSegments>
     </>
   );
@@ -451,6 +486,18 @@ export default function GujaratMap3D({
   const router = useRouter();
   const [terrain, setTerrain] = useState<Terrain | null>(null);
   const [source, setSource] = useState<ElevationSource | null>(null);
+  // The chosen style is remembered in this browser (this component only ever runs in the browser).
+  const [styleId, setStyleId] = useState<MapStyleId>(() => {
+    try {
+      const saved = localStorage.getItem("kg-map-style");
+      return MAP_STYLES.some((s) => s.id === saved) ? (saved as MapStyleId) : "ancient";
+    } catch {
+      return "ancient";
+    }
+  });
+  const [imagery, setImagery] = useState<Imagery | null>(null);
+  const [status, setStatus] = useState<{ kind: "idle" } | { kind: "loading"; label: string } | { kind: "error"; message: string }>({ kind: "idle" });
+  const style = styleById(styleId);
 
   const { lite, calm } = useMemo(() => {
     if (typeof window === "undefined") return { lite: false, calm: false };
@@ -471,6 +518,38 @@ export default function GujaratMap3D({
       alive = false;
     };
   }, [lite]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("kg-map-style", styleId);
+    } catch {
+      /* ignore */
+    }
+    const st = styleById(styleId);
+    if (!st.tiles) {
+      setImagery(null);
+      // keep an error message visible for a few seconds, then clear it
+      const t = setTimeout(() => setStatus({ kind: "idle" }), 5000);
+      setStatus((prev) => (prev.kind === "error" ? prev : { kind: "idle" }));
+      return () => clearTimeout(t);
+    }
+    let alive = true;
+    setStatus({ kind: "loading", label: st.label });
+    loadImagery(st, lite ? 8 : 9)
+      .then((img) => {
+        if (!alive) return;
+        setImagery(img);
+        setStatus(img.missing > 0.2 ? { kind: "error", message: `Some ${st.label.toLowerCase()} tiles didn't load.` } : { kind: "idle" });
+      })
+      .catch((e: Error) => {
+        if (!alive) return;
+        setStatus({ kind: "error", message: `${e.message} Showing the Ancient style.` });
+        setStyleId("ancient");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [styleId, lite]);
 
   const heightAt = terrain?.heightAt ?? (() => 0);
   const points = entities.filter((e): e is Located => e.lat != null && e.lng != null);
@@ -505,20 +584,22 @@ export default function GujaratMap3D({
         camera={{ fov: 34, near: 0.5, far: 400, position: [30, 60, 90] }}
         gl={{ antialias: true, powerPreference: "high-performance" }}
       >
-        <color attach="background" args={["#17110c"]} />
-        <fog attach="fog" args={["#17110c", 90, 220]} />
+        <color attach="background" args={[style.background]} />
+        <fog attach="fog" args={[style.background, 90, 220]} />
         <hemisphereLight args={["#fff0d4", "#3a2816", 0.9]} />
         <directionalLight position={[-30, 40, -20]} intensity={1.6} color="#ffd9a6" />
-        <Table />
-        <Slab />
-        {terrain && <Relief terrain={terrain} calm={calm} />}
+        <Table style={style} />
+        <Slab style={style} />
+        {terrain && <Relief terrain={terrain} calm={calm} imagery={imagery} edge={style.id === "ancient" ? "#33200f" : style.wallSide} />}
         <Markers points={points} heightAt={heightAt} selected={selected} />
         <CameraRig view={view} points={points} heightAt={heightAt} interactive={interactive} calm={calm} />
         <Projector pins={pins} />
       </Canvas>
 
       {/* candle-lit vignette */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_55%_45%,transparent_35%,rgb(12_8_5/0.75)_100%)]" />
+      <div
+        className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ${style.labels === "dark" ? "opacity-30" : "opacity-100"} bg-[radial-gradient(ellipse_at_55%_45%,transparent_35%,rgb(12_8_5/0.75)_100%)]`}
+      />
 
       {/* labels */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -526,15 +607,9 @@ export default function GujaratMap3D({
           <span
             key={p.name}
             ref={pinRef(`place-${p.name}`)}
-            className={`absolute left-0 top-0 whitespace-nowrap font-serif italic transition-opacity duration-300 ${
-              p.kind === "sea"
-                ? "text-[13px] tracking-[0.3em] text-[#c9a46a]/70 uppercase"
-                : p.kind === "region"
-                  ? "text-[12px] tracking-[0.25em] text-[#4a3220]/80 uppercase"
-                  : "text-[12px] text-[#3a2616]/85"
-            }`}
+            className={`absolute left-0 top-0 whitespace-nowrap font-serif italic transition-[opacity,color] duration-300 ${placeClass(style, p.kind)}`}
           >
-            {p.kind === "town" && <span className="mr-1 inline-block size-1.5 rounded-full bg-[#3a2616]/80 align-middle" />}
+            {p.kind === "town" && <span className="mr-1 inline-block size-1.5 rounded-full bg-current align-middle opacity-80" />}
             {p.name}
           </span>
         ))}
@@ -563,10 +638,82 @@ export default function GujaratMap3D({
         <path d="M8 50 L50 44 L92 50 L50 56 Z" fill="currentColor" opacity="0.5" />
         <text x="50" y="6" textAnchor="middle" fontSize="9" fill="currentColor" fontFamily="serif">N</text>
       </svg>
+      {interactive && (
+        <>
+          {/* cartouche: the map's title, in Gujarati and English */}
+          <div className="kg-cartouche pointer-events-none absolute right-10 top-[7.5rem] hidden text-center lg:block">
+            <p lang="gu" className={`font-gujarati text-2xl leading-none ${style.labels === "dark" ? "text-[#2b2118]" : "text-[#f3dfb8]"}`}>
+              ગુજરાત
+            </p>
+            <p className={`mt-1 font-display text-lg tracking-[0.3em] uppercase ${style.labels === "dark" ? "text-[#6b4a1c]" : "text-[#e8c27a]"}`}>
+              Gujarat
+            </p>
+            <p className={`mt-0.5 font-serif text-[12px] italic ${style.labels === "dark" ? "text-[#4a3a2a]" : "text-[#c9a46a]/80"}`}>
+              Drag to turn · scroll to zoom
+            </p>
+          </div>
+          <StyleSwitcher current={styleId} onChange={setStyleId} status={status} />
+        </>
+      )}
+
       {source && (
-        <p className="pointer-events-none absolute bottom-2 left-3 text-[11px] text-[#c9a46a]/55">
+        <p className={`pointer-events-none absolute bottom-2 left-3 right-3 text-[11px] ${style.labels === "dark" ? "text-black/55" : "text-[#c9a46a]/60"}`}>
           {source === "srtm" ? "Elevation: NASA SRTM via AWS Terrain Tiles" : "Elevation approximated (live data unavailable)"} · Boundary:
-          Census 2011 districts · Relief exaggerated 25×
+          Census 2011 districts · Relief exaggerated 25×{style.attribution && ` · ${style.attribution}`}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function placeClass(style: MapStyle, kind: "sea" | "region" | "town") {
+  if (style.labels === "ancient") {
+    if (kind === "sea") return "text-[13px] tracking-[0.3em] uppercase text-[#c9a46a]/70";
+    if (kind === "region") return "text-[12px] tracking-[0.25em] uppercase text-[#4a3220]/80";
+    return "text-[12px] text-[#3a2616]/85";
+  }
+  const tone =
+    style.labels === "light"
+      ? "text-white/90 [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]"
+      : "text-[#263038]/85 [text-shadow:0_0_3px_rgb(255_255_255/0.9)]";
+  if (kind === "sea") return `text-[13px] tracking-[0.3em] uppercase ${tone} opacity-75`;
+  if (kind === "region") return `text-[12px] tracking-[0.25em] uppercase ${tone}`;
+  return `text-[12px] not-italic ${tone}`;
+}
+
+/** Layer switcher, like the one in Google Maps. */
+function StyleSwitcher({
+  current,
+  onChange,
+  status,
+}: {
+  current: MapStyleId;
+  onChange: (id: MapStyleId) => void;
+  status: { kind: "idle" } | { kind: "loading"; label: string } | { kind: "error"; message: string };
+}) {
+  return (
+    <div className="pointer-events-auto absolute right-3 top-[7.5rem] flex flex-col items-end gap-2 sm:bottom-8 sm:right-28 sm:top-auto">
+      <div role="radiogroup" aria-label="Map style" className="flex rounded-md border border-[#b48c5c]/70 bg-[#1f160e]/85 p-0.5 shadow-[0_6px_20px_rgb(0_0_0/0.45)] backdrop-blur">
+        {MAP_STYLES.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            role="radio"
+            aria-checked={current === s.id}
+            onClick={() => onChange(s.id)}
+            className={`rounded px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 ${
+              current === s.id ? "bg-[#e8c27a] font-medium text-[#1f160e]" : "text-[#f3dfb8]/85 hover:bg-white/10"
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+      {status.kind !== "idle" && (
+        <p role="status" className="rounded bg-[#1f160e]/85 px-2.5 py-1 text-[12px] text-[#f3dfb8]">
+          {status.kind === "loading" ? `Loading ${status.label.toLowerCase()} imagery…` : status.message}
         </p>
       )}
     </div>
