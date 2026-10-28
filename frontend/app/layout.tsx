@@ -8,7 +8,7 @@ import "@fontsource/spectral/400.css";
 import "@fontsource/spectral/400-italic.css";
 import "@fontsource/spectral/600.css";
 import "@fontsource/rozha-one/400.css";
-import "leaflet/dist/leaflet.css";
+import "@fontsource/hind-vadodara/400.css";
 import "./globals.css";
 import SiteHeader from "@/components/SiteHeader";
 import WorldBackground from "@/components/WorldBackground";
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   description: "An evidence-aware heritage archive: every fact linked to its source, disagreements shown, gaps listed.",
 };
 
-export const viewport: Viewport = { themeColor: "#ede3d1" };
+export const viewport: Viewport = { themeColor: "#17110c" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -26,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh antialiased">
         <WorldBackground />
         <SiteHeader />
-        <div className="relative z-10">{children}</div>
+        <div className="pointer-events-none relative z-10">{children}</div>
       </body>
     </html>
   );
