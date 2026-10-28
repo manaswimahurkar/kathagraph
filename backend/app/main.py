@@ -8,13 +8,14 @@ from fastapi.responses import JSONResponse
 
 from . import embeddings
 from .db import get_conn
+from .entities import router as entities_router
 from .pipeline import embed_chunks, process_source
 from .storage import StorageError, upload_bytes
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("kathagraph")
 
-app = FastAPI(title="KathaGraph API", version="0.4.0")
+app = FastAPI(title="KathaGraph API", version="0.5.0")
 
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(
@@ -24,6 +25,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(entities_router)
+
 MAX_FILE_BYTES = 20 * 1024 * 1024  # 20 MB
 MAX_FILES_PER_UPLOAD = 50
 KINDS = {
@@ -32,7 +35,7 @@ KINDS = {
     ".txt": "note", ".md": "note",
     ".csv": "csv",
 }
-SOURCE_FIELDS = "id, filename, type, status, error, lat, lng, captured_at, file_url, created_at"
+SOURCE_FIELDS = "id, filename, type, status, error, lat, lng, captured_at, file_url, tag, description, created_at"
 
 
 @app.get("/")

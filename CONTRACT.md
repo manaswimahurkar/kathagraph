@@ -1,5 +1,7 @@
 # KathaGraph API contract
 
+> **Live API:** https://kathagraph-api.onrender.com · interactive docs at `/docs`. Status: all endpoints below are implemented (backend v0.5.0).
+
 The frontend and backend both build against this file. If you change a shape, update it here and tell your partner.
 
 Database tables: see `backend/schema.sql`.
@@ -130,3 +132,26 @@ A researcher verifies or rejects a claim.
 - `500` unexpected (logged)
 
 > Example values above (dates, coordinates, names) are placeholders showing the shape only. Don't treat them as facts.
+
+
+---
+
+## Added during the build (backend v0.5.0)
+
+All of these are live; the shapes above are unchanged, only extra fields were added.
+
+| Endpoint | What it does |
+|---|---|
+| `GET /sources?limit=100` | List uploaded files, newest first: `{ "sources": [ { id, filename, type, status, error, lat, lng, captured_at, file_url, tag, description, created_at } ] }` |
+| `GET /sources/{id}/text` | Text extracted from one file: `{ "source": {...}, "chunks": [ { id, page, language, text } ] }` |
+| `POST /sources/{id}/reprocess` | Run the pipeline again on one file → `202 { id, status: "pending" }` |
+| `POST /entities` | Register a monument by hand: body `{ name, type?, lat?, lng?, aliases? }` → `201` + the full monument (same shape as `GET /entities/{id}`) |
+| `PATCH /entities/{id}` | Fix a monument's `name` or set `lat`/`lng` → the full monument |
+| `POST /admin/reindex` | Build search vectors for text that has none yet → `{ "embedded": n }` |
+| `POST /admin/reprocess` | Re-run the pipeline on every file (slow; runs in the background) → `{ "queued": n }` |
+
+**Extra fields**
+- `GET /search` → adds `"mode": "semantic" | "keyword"`, and per result `language` and `source.file_url`.
+- `GET /entities` → each monument also has `n_claims`.
+- `GET /entities/{id}` → each source has `tag` (`exterior_photo` / `interior_photo` / `inscription` / `carving_detail` / `other`), `description` (AI description of a photo, label it as AI), `lat`, `lng`, `status`; each conflict claim has `status`.
+- `sources[].status` while processing: `pending` → `processing` → `done` | `failed`. When `done`, `error` may hold a warning (e.g. "OCR skipped"); show it as a note, not a failure.

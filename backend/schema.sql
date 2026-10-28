@@ -14,6 +14,8 @@ create table if not exists sources (
   status       text not null default 'pending'
                check (status in ('pending','processing','done','failed')),
   error        text,
+  tag          text,           -- AI photo type: exterior_photo, interior_photo, inscription, ...
+  description  text,           -- AI description of a photo (marked as AI in search)
   created_at   timestamptz not null default now()
 );
 
@@ -53,6 +55,7 @@ create table if not exists claims (
   entity_id   bigint not null references entities(id) on delete cascade,
   field       text not null,          -- e.g. built_date, builder, material
   value       text not null,
+  quote       text,                   -- exact words in the source that state this claim
   source_id   bigint not null references sources(id) on delete cascade,
   chunk_id    bigint references chunks(id) on delete set null,
   method      text not null check (method in ('ocr','llm','exif','manual')),
