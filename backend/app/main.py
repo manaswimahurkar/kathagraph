@@ -13,7 +13,7 @@ from .storage import StorageError, upload_bytes
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("kathagraph")
 
-app = FastAPI(title="KathaGraph API", version="0.2.0")
+app = FastAPI(title="KathaGraph API", version="0.3.0")
 
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(
@@ -114,3 +114,17 @@ def get_source(source_id: int):
     if not row:
         raise HTTPException(404, "Source not found.")
     return row
+
+
+@app.get("/sources/{source_id}/text")
+def get_source_text(source_id: int):
+    """The text extracted from one file, piece by piece (for checking OCR)."""
+    with get_conn() as conn:
+        src = conn.execute("select id, filename, status, error from sources where id = %s", (source_id,)).fetchone()
+        if not src:
+            raise HTTPException(404, "Source not found.")
+        chunks = conn.execute(
+            "select id, page, language, text from chunks where source_id = %s order by page nulls first, id",
+            (source_id,),
+        ).fetchall()
+    return {"source": src, "chunks": chunks}
