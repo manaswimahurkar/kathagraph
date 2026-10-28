@@ -16,7 +16,7 @@ export default function StatusPage() {
   }, []);
 
   return (
-    <main className="mx-auto max-w-2xl px-4 pt-10">
+    <main className="kg-sheet mx-auto w-[calc(100%-1.5rem)] max-w-2xl px-4 pb-10 pt-10">
       <h1 className="font-display text-4xl">System status</h1>
       <p className="mt-2 text-dust">{USE_MOCK ? "Using demo data (NEXT_PUBLIC_API_URL is not set)." : "Checking the live backend."}</p>
       <section className="mt-6 rounded-md border border-line bg-paper p-4">

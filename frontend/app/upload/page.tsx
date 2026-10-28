@@ -130,7 +130,7 @@ export default function UploadPage() {
   const added = items.filter((i) => i.phase === "done").length;
 
   return (
-    <main className="mx-auto max-w-3xl px-4 pb-20 pt-6 sm:pt-10">
+    <main className="kg-sheet mx-auto w-[calc(100%-1.5rem)] max-w-3xl px-4 pb-16 pt-6 sm:pt-10">
       <h1 className="font-display text-4xl sm:text-5xl">Add files to the archive</h1>
       <p className="mt-2 max-w-xl text-[17px] text-dust">
         Photos, scanned documents in English or Hindi, and field notes. KathaGraph reads the GPS and text, then links

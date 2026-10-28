@@ -131,3 +131,34 @@ mark {
 @media (prefers-reduced-motion: reduce) {
   .kg-skeleton { animation: none; }
 }
+
+/* ---------- the 3D world shows through; content sits on paper sheets ---------- */
+
+/* A sheet of paper floating over the 3D world. The gap above it is a window onto the scene. */
+.kg-sheet {
+  position: relative;
+  margin-top: clamp(140px, 30vh, 320px);
+  margin-bottom: 4rem;
+  background: rgb(248 242 231 / 0.94);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  box-shadow: 0 30px 80px rgb(42 36 29 / 0.35), 0 2px 0 rgb(255 255 255 / 0.6) inset;
+  animation: kg-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (min-width: 640px) {
+  .kg-sheet { padding-left: 2.5rem; padding-right: 2.5rem; }
+}
+
+/* Panels rise into place when a page opens, while the camera glides to its new spot */
+@keyframes kg-rise {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: none; }
+}
+.kg-rise-1 { animation: kg-rise 0.8s 0.1s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.kg-rise-2 { animation: kg-rise 0.8s 0.25s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.kg-rise-3 { animation: kg-rise 0.8s 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kg-sheet, .kg-rise-1, .kg-rise-2, .kg-rise-3 { animation: none; }
+}

@@ -15,8 +15,6 @@ const MonumentMap = dynamic(() => import("@/components/MonumentMap"), {
   loading: () => <Skeleton className="h-full w-full !rounded-none" />,
 });
 
-// The 3D stepwell is decoration, so it loads after the page and never blocks the map.
-const Stepwell3D = dynamic(() => import("@/components/Stepwell3D"), { ssr: false, loading: () => null });
 
 type State =
   | { kind: "loading" }
@@ -40,38 +38,39 @@ export default function HomePage() {
 
   return (
     <>
-      <section className="relative overflow-hidden bg-ink text-paper">
+      {/* Hero: text over the 3D world (the world itself is rendered in the layout) */}
+      <section className="relative flex min-h-[calc(100svh-7rem)] items-end overflow-hidden pb-10 sm:items-center sm:pb-0">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/45 to-transparent sm:bg-gradient-to-r sm:from-ink/85 sm:via-ink/50 sm:to-transparent"
+        />
         <p
           lang="hi"
           aria-hidden="true"
-          className="pointer-events-none absolute -bottom-16 -left-6 select-none font-display text-[13rem] leading-none text-paper/[0.05] sm:text-[20rem]"
+          className="pointer-events-none absolute -bottom-10 right-0 select-none font-display text-[11rem] leading-none text-paper/[0.08] sm:text-[18rem]"
         >
           कथा
         </p>
-        <div className="relative mx-auto grid max-w-6xl items-center gap-4 px-4 pb-8 pt-10 lg:grid-cols-[1.05fr_1fr] lg:pb-4 lg:pt-6">
-          <div className="lg:py-16">
-            <h1 className="font-display text-[2.6rem] leading-[1.08] sm:text-6xl">
+        <div className="relative mx-auto w-full max-w-6xl px-4 text-paper">
+          <div className="max-w-xl">
+            <h1 className="kg-rise-1 font-display text-[2.6rem] leading-[1.08] sm:text-6xl">
               What do we actually know about each monument?
             </h1>
-            <p className="mt-5 max-w-xl font-serif text-lg leading-relaxed text-paper/80 sm:text-xl">
+            <p className="kg-rise-2 mt-5 font-serif text-lg leading-relaxed text-paper/85 sm:text-xl">
               Every fact here points back to the photo, scan or field note it came from. Where sources disagree, you see
               both. Where the record has holes, we list them.
             </p>
-            <div className="mt-8 max-w-xl">
+            <div className="kg-rise-3 mt-8">
               <SearchBar />
+              <a href="#archive" className="mt-5 inline-block text-[15px] text-paper/80 underline underline-offset-4 hover:text-paper">
+                Explore the archive by place
+              </a>
             </div>
           </div>
-          <figure className="relative">
-            <Stepwell3D className="h-[300px] w-full sm:h-[420px] lg:h-[520px]" />
-            <figcaption className="mt-1 text-center text-[13px] text-paper/55">
-              A Gujarat stepwell, modelled in code. Drag to turn it.
-            </figcaption>
-          </figure>
         </div>
-        <div className="kg-frieze kg-frieze-light" aria-hidden="true" />
       </section>
 
-    <main className="mx-auto max-w-6xl px-4 pb-16 pt-10">
+    <main id="archive" className="kg-sheet mx-auto w-[calc(100%-1.5rem)] max-w-6xl scroll-mt-24 px-4 pb-12 pt-8 !mt-0">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <h2 className="font-display text-3xl sm:text-4xl">The archive, by place</h2>
         <p className="text-[15px] text-dust">Click a pin to open its record.</p>
