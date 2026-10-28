@@ -16,8 +16,11 @@ create table if not exists sources (
   error        text,
   tag          text,           -- AI photo type: exterior_photo, interior_photo, inscription, ...
   description  text,           -- AI description of a photo (marked as AI in search)
+  content_hash text,           -- SHA-256 of the file, to catch duplicate uploads
   created_at   timestamptz not null default now()
 );
+
+create index if not exists sources_hash_idx on sources(content_hash);
 
 -- Text pulled out of a source (OCR / parsing), split into searchable pieces
 create table if not exists chunks (

@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -15,7 +16,7 @@ from .storage import StorageError, upload_bytes
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("kathagraph")
 
-app = FastAPI(title="KathaGraph API", version="0.5.0")
+app = FastAPI(title="KathaGraph API", version="0.6.0")
 
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(
@@ -26,6 +27,23 @@ app.add_middleware(
 )
 
 app.include_router(entities_router)
+
+
+@app.on_event("startup")
+def recover_interrupted():
+    """Files that were mid-processing when the server stopped would otherwise
+    say 'processing' forever. Mark them so they can be reprocessed."""
+    try:
+        with get_conn() as conn:
+            n = conn.execute(
+                """update sources set status = 'failed',
+                          error = 'Interrupted by a server restart. Use reprocess to run it again.'
+                   where status in ('pending', 'processing')"""
+            ).rowcount
+        if n:
+            log.warning("Marked %d interrupted file(s) as failed", n)
+    except Exception:
+        log.exception("Could not check for interrupted files")
 
 MAX_FILE_BYTES = 20 * 1024 * 1024  # 20 MB
 MAX_FILES_PER_UPLOAD = 50
@@ -80,13 +98,27 @@ async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...
         batch.append((name, kind, data, f.content_type))
 
     created = []
+    seen_in_batch: dict[str, int] = {}
     for name, kind, data, content_type in batch:
+        digest = hashlib.sha256(data).hexdigest()
+        # The same file uploaded again (by anyone, under any name) is not processed twice
+        with get_conn() as conn:
+            existing = conn.execute(
+                "select id, filename from sources where content_hash = %s order by id limit 1", (digest,)
+            ).fetchone()
+        if existing or digest in seen_in_batch:
+            original = existing["id"] if existing else seen_in_batch[digest]
+            created.append({"id": original, "filename": name, "type": kind, "status": "duplicate",
+                            "duplicate_of": original,
+                            "error": f"Identical to a file already in the archive (source #{original})."})
+            continue
         with get_conn() as conn:
             row = conn.execute(
-                "insert into sources (type, filename) values (%s, %s) returning id",
-                (kind, name),
+                "insert into sources (type, filename, content_hash) values (%s, %s, %s) returning id",
+                (kind, name, digest),
             ).fetchone()
         source_id = row["id"]
+        seen_in_batch[digest] = source_id
         try:
             url = upload_bytes(data, name, content_type)
         except StorageError as e:
@@ -118,6 +150,21 @@ def get_source(source_id: int):
     if not row:
         raise HTTPException(404, "Source not found.")
     return row
+
+
+@app.delete("/sources/{source_id}")
+def delete_source(source_id: int):
+    """Remove a file and everything extracted from it (text, claims, links)."""
+    with get_conn() as conn:
+        row = conn.execute("delete from sources where id = %s returning id", (source_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Source not found.")
+        # Monuments left with no evidence at all are removed too
+        conn.execute(
+            """delete from entities e where not exists (select 1 from entity_sources es where es.entity_id = e.id)
+               and not exists (select 1 from claims c where c.entity_id = e.id) and e.lat is null"""
+        )
+    return {"deleted": source_id}
 
 
 @app.get("/sources/{source_id}/text")

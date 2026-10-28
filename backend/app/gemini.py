@@ -20,14 +20,19 @@ RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
 class GeminiError(RuntimeError):
-    pass
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
+
+
+_thinking_off_supported = True  # flips to False if the model rejects the setting
 
 
 def available() -> bool:
     return bool(os.getenv("GEMINI_API_KEY"))
 
 
-def post_with_retry(url: str, body: dict, attempts: int = 4, timeout: float = 90) -> dict:
+def post_with_retry(url: str, body: dict, attempts: int = 3, timeout: float = 60) -> dict:
     key = os.getenv("GEMINI_API_KEY", "")
     if not key:
         raise GeminiError("GEMINI_API_KEY is not set")
@@ -45,14 +50,45 @@ def post_with_retry(url: str, body: dict, attempts: int = 4, timeout: float = 90
             time.sleep(wait)
             continue
         if resp.status_code >= 300:
-            raise GeminiError(f"Gemini error {resp.status_code}: {resp.text[:300]}")
+            try:
+                detail = resp.json()["error"]["message"]
+            except Exception:
+                detail = resp.text[:200]
+            raise GeminiError(f"Gemini error {resp.status_code}: {detail}", resp.status_code)
         return resp.json()
     raise GeminiError("Gemini did not respond")
 
 
+FALLBACK_STATUS = {404, 429, 500, 502, 503, 504, None}
+
+
+def _models() -> list[str]:
+    """Models to try in order; later ones are used when earlier ones are busy."""
+    raw = os.getenv("GEMINI_MODELS", "gemini-flash-latest,gemini-flash-lite-latest,gemini-2.5-flash")
+    return [m.strip() for m in raw.split(",") if m.strip()]
+
+
+def _call(model: str, body: dict) -> dict:
+    global _thinking_off_supported
+    url = f"{API}/{model}:generateContent"
+    config = body["generationConfig"]
+    # Extraction is a reading task, not a reasoning one: switch off slow "thinking"
+    if _thinking_off_supported:
+        config["thinkingConfig"] = {"thinkingBudget": 0}
+        try:
+            return post_with_retry(url, body, attempts=2)
+        except GeminiError as e:
+            if e.status != 400 or "thinking" not in str(e).lower():
+                raise
+            log.info("Model %s does not accept thinkingBudget=0; using its default", model)
+            _thinking_off_supported = False
+    config.pop("thinkingConfig", None)
+    return post_with_retry(url, body, attempts=2)
+
+
 def generate_json(parts: list[dict], schema: dict, temperature: float = 0.1) -> dict:
-    """Ask Gemini for an answer that follows `schema` (OpenAPI-style)."""
-    model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+    """Ask Gemini for an answer that follows `schema` (OpenAPI-style).
+    Falls back to the next model if one is overloaded or unavailable."""
     body = {
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {
@@ -61,7 +97,19 @@ def generate_json(parts: list[dict], schema: dict, temperature: float = 0.1) -> 
             "temperature": temperature,
         },
     }
-    data = post_with_retry(f"{API}/{model}:generateContent", body)
+    last_error: GeminiError | None = None
+    for model in _models():
+        try:
+            data = _call(model, body)
+            break
+        except GeminiError as e:
+            if e.status not in FALLBACK_STATUS:
+                raise
+            log.warning("Model %s unavailable (%s); trying the next one", model, e)
+            last_error = e
+    else:
+        raise last_error or GeminiError("No Gemini model available")
+
     try:
         candidate = data["candidates"][0]
         text = "".join(p.get("text", "") for p in candidate["content"]["parts"] if not p.get("thought"))
