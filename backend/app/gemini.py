@@ -59,12 +59,14 @@ def post_with_retry(url: str, body: dict, attempts: int = 3, timeout: float = 60
     raise GeminiError("Gemini did not respond")
 
 
-FALLBACK_STATUS = {404, 429, 500, 502, 503, 504, None}
+# 400 is included: a model alias such as "gemini-flash-latest" can move to a newer
+# model that rejects a setting the previous one accepted ("invalid argument").
+FALLBACK_STATUS = {400, 404, 429, 500, 502, 503, 504, None}
 
 
 def _models() -> list[str]:
-    """Models to try in order; later ones are used when earlier ones are busy."""
-    raw = os.getenv("GEMINI_MODELS", "gemini-flash-latest,gemini-flash-lite-latest,gemini-2.5-flash")
+    """Models to try in order; later ones are used when earlier ones are busy or refuse the request."""
+    raw = os.getenv("GEMINI_MODELS", "gemini-flash-latest,gemini-2.5-flash,gemini-flash-lite-latest")
     return [m.strip() for m in raw.split(",") if m.strip()]
 
 
@@ -72,17 +74,19 @@ def _call(model: str, body: dict) -> dict:
     global _thinking_off_supported
     url = f"{API}/{model}:generateContent"
     config = body["generationConfig"]
-    # Extraction is a reading task, not a reasoning one: switch off slow "thinking"
+    # Extraction is a reading task, not a reasoning one: try switching off slow "thinking".
+    # Newer models may reject this setting with a plain 400, so any 400 means: try again without it.
     if _thinking_off_supported:
         config["thinkingConfig"] = {"thinkingBudget": 0}
         try:
             return post_with_retry(url, body, attempts=2)
         except GeminiError as e:
-            if e.status != 400 or "thinking" not in str(e).lower():
+            if e.status != 400:
                 raise
-            log.info("Model %s does not accept thinkingBudget=0; using its default", model)
+            log.info("Model %s refused thinkingBudget=0 (%s); retrying with its default", model, e)
             _thinking_off_supported = False
-    config.pop("thinkingConfig", None)
+        finally:
+            config.pop("thinkingConfig", None)
     return post_with_retry(url, body, attempts=2)
 
 
