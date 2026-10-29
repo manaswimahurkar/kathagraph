@@ -138,7 +138,7 @@ def _from_pdf(data: bytes) -> Extracted:
 
 
 def extract(kind: str, data: bytes) -> Extracted:
-    if kind in ("note", "csv"):
+    if kind in ("note", "csv", "web"):
         text = _decode(data).strip()
         return Extracted(pages=[(None, text)] if text else [])
     if kind == "pdf":

@@ -493,6 +493,7 @@ const TYPE_PLURAL: Record<string, [string, string]> = {
   pdf: ["scanned document", "scanned documents"],
   note: ["field note", "field notes"],
   csv: ["spreadsheet", "spreadsheets"],
+  web: ["published reference", "published references"],
 };
 
 function AtAGlance({ entity }: { entity: EntityDetail }) {
@@ -619,7 +620,7 @@ function Contribute({ entity }: { entity: EntityDetail }) {
 
 // ---------- Sources ----------
 
-const TYPE_LABEL = { photo: "Photo", pdf: "PDF scan", note: "Field note", csv: "Spreadsheet" } as const;
+const TYPE_LABEL = { photo: "Photo", pdf: "PDF scan", note: "Field note", csv: "Spreadsheet", web: "Wikipedia (published reference)" } as const;
 
 function SourceList({ entity }: { entity: EntityDetail }) {
   return (

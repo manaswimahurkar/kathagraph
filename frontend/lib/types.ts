@@ -1,7 +1,8 @@
 // API shapes for KathaGraph — mirrors CONTRACT.md exactly.
 // If CONTRACT.md changes, update this file (and lib/mock.ts) to match.
 
-export type SourceType = "photo" | "pdf" | "note" | "csv";
+/** "web" = published reference text imported from the web (Wikipedia), never a field record. */
+export type SourceType = "photo" | "pdf" | "note" | "csv" | "web";
 export type SourceStatus = "pending" | "processing" | "done" | "failed";
 export type ClaimMethod = "ocr" | "llm" | "exif" | "manual";
 export type ClaimStatus = "unverified" | "verified" | "rejected";
@@ -169,6 +170,7 @@ const TAG_LABELS: Record<string, string> = {
   carving_detail: "Carving detail",
   other: "Photo",
   notes: "Field notes",
+  reference: "Published reference",
   report: "Report",
 };
 

@@ -157,6 +157,14 @@ def _process(source_id: int, data: bytes, kind: str):
                 else:
                     matching.link_photo(conn, {"id": source_id, "filename": source["filename"],
                                                "lat": meta["lat"], "lng": meta["lng"], "tag": tag})
+            if kind == "web":
+                # A published article is always evidence for the monument it was imported for
+                row = conn.execute(
+                    "select (exif_json->'web'->>'entity_id')::bigint as eid from sources where id = %s",
+                    (source_id,),
+                ).fetchone()
+                if row and row["eid"]:
+                    matching.link(conn, row["eid"], source_id, "reference")
             matching.relink_unlinked_photos(conn)
 
         _set_status(source_id, "done", " ".join(warnings) or None)

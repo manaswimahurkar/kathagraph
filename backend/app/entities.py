@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from . import analysis, matching
 from .db import get_conn
 from .pipeline import reprocess_source
+from . import wiki
 
 router = APIRouter()
 
@@ -148,6 +149,31 @@ def reprocess_one(source_id: int, background: BackgroundTasks):
         conn.execute("update sources set status = 'pending' where id = %s", (source_id,))
     background.add_task(reprocess_source, source_id)
     return {"id": source_id, "status": "pending"}
+
+
+class WikiImport(BaseModel):
+    titles: list[str] = Field(min_length=1, max_length=20)
+    hindi: bool = True
+
+
+def _import_all(titles: list[str], hindi: bool) -> None:
+    for title in titles:
+        try:
+            wiki.import_monument(title, hindi)
+        except Exception:  # one failed article must not stop the rest
+            wiki.log.exception("Wikipedia import failed for %r", title)
+
+
+@router.post("/import/wikipedia", status_code=202)
+def import_wikipedia(body: WikiImport, background: BackgroundTasks):
+    """Import published reference text (English + Hindi Wikipedia) for monuments by article title.
+    Each article is stored with its attribution and licence, processed like any upload,
+    and linked to its monument; the article's coordinates place the monument on the map."""
+    titles = [t.strip() for t in body.titles if t.strip()]
+    if not titles:
+        raise HTTPException(400, "Give at least one article title.")
+    background.add_task(_import_all, titles, body.hindi)
+    return {"queued": titles}
 
 
 @router.post("/admin/reprocess", status_code=202)

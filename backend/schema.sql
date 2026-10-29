@@ -4,7 +4,7 @@ create extension if not exists vector;
 -- Every uploaded file (photo, pdf, note, csv)
 create table if not exists sources (
   id           bigserial primary key,
-  type         text not null check (type in ('photo','pdf','note','csv')),
+  type         text not null check (type in ('photo','pdf','note','csv','web')),
   filename     text not null,
   file_url     text,
   exif_json    jsonb,
