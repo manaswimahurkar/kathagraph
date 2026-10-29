@@ -10,8 +10,8 @@ interface Photo {
 }
 
 /**
- * Photos linked to a monument. The entity response lists photo sources without URLs,
- * so each one's file_url comes from GET /sources/{id}.
+ * Photos linked to a monument. The backend (v0.5+) includes each photo's file_url in the
+ * entity response; older responses and mock data don't, so those fall back to GET /sources/{id}.
  */
 export default function PhotoGallery({ sources, citation }: { sources: EntitySource[]; citation: Map<number, number> }) {
   const photos = sources.filter((s) => s.type === "photo");
@@ -22,9 +22,11 @@ export default function PhotoGallery({ sources, citation }: { sources: EntitySou
     let alive = true;
     Promise.all(
       photos.map((s) =>
-        getSource(s.id)
-          .then((d) => ({ source: s, url: d.file_url }))
-          .catch(() => ({ source: s, url: null })),
+        s.file_url !== undefined
+          ? Promise.resolve({ source: s, url: s.file_url ?? null })
+          : getSource(s.id)
+              .then((d) => ({ source: s, url: d.file_url }))
+              .catch(() => ({ source: s, url: null })),
       ),
     ).then((r) => alive && setItems(r));
     return () => {
@@ -98,7 +100,15 @@ export default function PhotoGallery({ sources, citation }: { sources: EntitySou
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={open.url} alt={open.source.filename} className="max-h-[85vh] max-w-full rounded-sm shadow-2xl" />
-          <p className="mt-3 text-center text-[13px] text-white/80">
+          {open.source.description && (
+            <p className="mt-3 max-w-2xl text-center text-[14px] text-white/90">
+              <span className="mr-1.5 rounded-sm bg-white/15 px-1.5 py-0.5 text-[11px] uppercase tracking-wide">
+                AI description
+              </span>
+              {open.source.description}
+            </p>
+          )}
+          <p className="mt-2 text-center text-[13px] text-white/80">
             {open.source.filename} · click anywhere or press Esc to close
           </p>
         </div>

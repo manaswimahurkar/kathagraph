@@ -20,7 +20,10 @@ export interface UploadedSource {
   id: number;
   filename: string;
   type: SourceType;
-  status: SourceStatus;
+  /** "duplicate": identical content is already in the archive; nothing new was stored. */
+  status: SourceStatus | "duplicate";
+  duplicate_of?: number;
+  error?: string | null;
 }
 export interface UploadResponse {
   sources: UploadedSource[];
@@ -48,6 +51,8 @@ export interface SearchResult {
 }
 export interface SearchResponse {
   query: string;
+  /** "semantic" = matched by meaning (Gemini embeddings); "keyword" = fallback word matching. */
+  mode?: "semantic" | "keyword";
   results: SearchResult[];
 }
 
@@ -108,6 +113,10 @@ export interface EntitySource {
   filename: string;
   type: SourceType;
   tag: string | null; // e.g. exterior_photo
+  /** Returned by the backend since v0.5; optional so mock data still type-checks. */
+  file_url?: string | null;
+  /** AI description of a photo. Always label it as AI-written. */
+  description?: string | null;
 }
 
 export interface EntityDetail {
@@ -142,6 +151,9 @@ const FIELD_LABELS: Record<string, string> = {
   dynasty: "Dynasty",
   material: "Material",
   storeys: "Number of levels",
+  architectural_style: "Architectural style",
+  purpose: "Purpose",
+  inscription: "Inscription",
   status: "Protection status",
   location: "Location",
 };
@@ -154,6 +166,8 @@ const TAG_LABELS: Record<string, string> = {
   exterior_photo: "Exterior photo",
   interior_photo: "Interior photo",
   inscription: "Inscription",
+  carving_detail: "Carving detail",
+  other: "Photo",
   notes: "Field notes",
   report: "Report",
 };

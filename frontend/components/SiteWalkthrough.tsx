@@ -64,12 +64,7 @@ export default function SiteWalkthrough({ name, lat, lng }: { name: string; lat:
           </p>
         </>
       ) : (
-        <div className="rounded-sm border border-dashed border-line p-5">
-          <p className="text-[15px]">See {name} as if you were there, on Google:</p>
-          <p className="mt-1 text-[13px] text-dust">
-            The in-page walkthrough turns on once a Google Maps key is added to the site.
-          </p>
-        </div>
+        <p className="text-[15px]">See {name} as it looks today, in Street View or from the air:</p>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
         <a

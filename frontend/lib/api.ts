@@ -20,6 +20,9 @@ const RAW_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").trim().replace(/\/+$/, "
 export const USE_MOCK = RAW_URL === "" || RAW_URL.toLowerCase() === "mock";
 const API_URL = USE_MOCK ? "" : RAW_URL;
 const TIMEOUT_MS = 20_000;
+// The free backend host sleeps after ~15 idle minutes and takes 30-60 s to wake up.
+// Reads that time out or can't connect get one more, longer try before showing an error.
+const WAKE_TIMEOUT_MS = 70_000;
 
 /** Every failure, real or mock, comes out as one of these. `status` is null for network errors. */
 export class ApiError extends Error {
@@ -30,6 +33,7 @@ export class ApiError extends Error {
 }
 
 const OFFLINE = "Can't reach the archive server. Check your connection, then try again.";
+const STILL_WAKING = "The archive server is still waking up (free hosting sleeps when idle). Try again in a moment.";
 
 async function readDetail(res: Response): Promise<string> {
   try {
@@ -44,15 +48,18 @@ async function readDetail(res: Response): Promise<string> {
   return `The server answered ${res.status}.`;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, retry = true): Promise<T> {
+  const isRead = !init?.method || init.method === "GET";
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), retry ? TIMEOUT_MS : WAKE_TIMEOUT_MS);
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, { ...init, signal: controller.signal, cache: "no-store" });
   } catch (e) {
+    // Only reads are retried: repeating a write (e.g. PATCH) could apply it twice
+    if (retry && isRead) return request<T>(path, init, false);
     const timedOut = e instanceof DOMException && e.name === "AbortError";
-    throw new ApiError(timedOut ? "The archive server took too long to answer." : OFFLINE);
+    throw new ApiError(timedOut ? (isRead ? STILL_WAKING : "The archive server took too long to answer.") : OFFLINE);
   } finally {
     clearTimeout(timer);
   }

@@ -23,7 +23,7 @@ type State =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "error"; message: string }
-  | { kind: "ready"; results: SearchResult[] };
+  | { kind: "ready"; results: SearchResult[]; mode?: "semantic" | "keyword" };
 
 function SearchView() {
   const q = (useSearchParams().get("q") ?? "").trim();
@@ -36,7 +36,7 @@ function SearchView() {
     }
     setState({ kind: "loading" });
     search(q)
-      .then((r) => setState({ kind: "ready", results: r.results }))
+      .then((r) => setState({ kind: "ready", results: r.results, mode: r.mode }))
       .catch((e: Error) => setState({ kind: "error", message: e.message }));
   }, [q]);
 
@@ -99,6 +99,8 @@ function SearchView() {
               ? "No results"
               : `${state.results.length} ${state.results.length === 1 ? "passage" : "passages"}`}{" "}
             for <span className="font-medium text-ink">“{q}”</span>
+            {state.results.length > 0 && state.mode === "semantic" && " · matched by meaning, in any language"}
+            {state.results.length > 0 && state.mode === "keyword" && " · matched by keywords"}
           </h1>
 
           {state.results.length === 0 ? (
@@ -167,9 +169,16 @@ function ResultCard({ result, query }: { result: SearchResult; query: string }) 
   );
 }
 
-/** Wraps every occurrence of each query word in <mark>. Works for Devanagari too. */
+// Small words that would light up every passage if highlighted
+const STOPWORDS = new Set([
+  "the", "a", "an", "of", "and", "or", "in", "on", "at", "to", "by", "for", "is", "was", "it", "its", "who", "what",
+  "when", "where", "which", "how", "did", "does", "this", "that", "with", "from",
+  "का", "की", "के", "में", "से", "ने", "को", "है", "था", "थी", "और",
+]);
+
+/** Wraps every occurrence of each meaningful query word in <mark>. Works for Devanagari too. */
 function Highlight({ text, query }: { text: string; query: string }) {
-  const terms = [...new Set(query.split(/\s+/).filter((t) => t.length > 1))];
+  const terms = [...new Set(query.split(/\s+/).filter((t) => t.length > 1 && !STOPWORDS.has(t.toLowerCase())))];
   if (terms.length === 0) return <>{text}</>;
   const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const parts = text.split(new RegExp(`(${escaped.join("|")})`, "gi"));

@@ -7,12 +7,12 @@ import { getSource, upload } from "@/lib/api";
 import { useEntities } from "@/lib/useEntities";
 
 const MAX_BYTES = 20 * 1024 * 1024; // CONTRACT.md: 413 above 20 MB
-const ACCEPT = ".jpg,.jpeg,.png,.webp,.tif,.tiff,.heic,.pdf,.txt,.md,.csv";
-const ALLOWED = /\.(jpe?g|png|webp|tiff?|heic|pdf|txt|md|csv)$/i;
+const ACCEPT = ".jpg,.jpeg,.png,.webp,.tif,.tiff,.pdf,.txt,.md,.csv"; // same list as the backend
+const ALLOWED = /\.(jpe?g|png|webp|tiff?|pdf|txt|md|csv)$/i;
 const POLL_MS = 2000;
 const MAX_POLLS = 90; // ~3 minutes
 
-type Phase = "queued" | "uploading" | "pending" | "processing" | "done" | "failed" | "rejected";
+type Phase = "queued" | "uploading" | "pending" | "processing" | "done" | "duplicate" | "failed" | "rejected";
 
 interface Item {
   key: string;
@@ -30,6 +30,7 @@ const PHASE_TEXT: Record<Phase, string> = {
   pending: "Uploaded, waiting to be read",
   processing: "Reading text and extracting facts",
   done: "Added to the archive",
+  duplicate: "Already in the archive",
   failed: "Couldn't be processed",
   rejected: "Not uploaded",
 };
@@ -40,6 +41,7 @@ const PHASE_STYLE: Record<Phase, string> = {
   pending: "text-ink",
   processing: "text-ink",
   done: "text-water",
+  duplicate: "text-dust",
   failed: "text-rust",
   rejected: "text-rust",
 };
@@ -91,7 +93,9 @@ function UploadView() {
       await new Promise((r) => setTimeout(r, POLL_MS));
       try {
         const s = await getSource(sourceId);
-        if (s.status === "done") return patch(key, { phase: "done", gps: s.lat != null && s.lng != null });
+        // A finished file can still carry a note, e.g. "OCR skipped": show it, but as a note, not a failure
+        if (s.status === "done")
+          return patch(key, { phase: "done", gps: s.lat != null && s.lng != null, message: s.error ?? undefined });
         if (s.status === "failed") return patch(key, { phase: "failed", message: s.error ?? "Processing failed." });
         patch(key, { phase: s.status });
       } catch {
@@ -108,6 +112,15 @@ function UploadView() {
       const res = await upload([item.file], (pct) => patch(item.key, { progress: pct }));
       const src = res.sources[0];
       if (!src) throw new Error("The server didn't return the new file.");
+      if (src.status === "duplicate") {
+        // The backend recognised identical content (same SHA-256) and did not store it again
+        return patch(item.key, {
+          phase: "duplicate",
+          sourceId: src.duplicate_of ?? src.id,
+          progress: 100,
+          message: src.error ?? `Identical to a file already in the archive (source #${src.duplicate_of ?? src.id}).`,
+        });
+      }
       patch(item.key, { phase: src.status, sourceId: src.id, progress: 100 });
       if (src.status === "pending" || src.status === "processing") void poll(item.key, src.id);
     } catch (e) {
@@ -143,7 +156,7 @@ function UploadView() {
     if (confirmed && e.dataTransfer.files.length) void addFiles(e.dataTransfer.files);
   }
 
-  const finished = items.filter((i) => ["done", "failed", "rejected"].includes(i.phase)).length;
+  const finished = items.filter((i) => ["done", "duplicate", "failed", "rejected"].includes(i.phase)).length;
   const added = items.filter((i) => i.phase === "done").length;
 
   return (
@@ -168,7 +181,8 @@ function UploadView() {
           The archive is for evidence that isn&apos;t recorded anywhere else yet: your own photos, field notes, sketches, or
           unpublished family and community documents. Please don&apos;t upload files that are already in this archive
           (check the monument&apos;s Sources list) or that are already on the internet, such as photos from websites or
-          text from Wikipedia and books.
+          text from Wikipedia and books. Openly licensed images (for example from Wikimedia Commons) are fine when
+          their licence allows it and the author is credited.
         </p>
         <label className="mt-3 flex cursor-pointer items-start gap-2.5 text-[15px]">
           <input
@@ -178,7 +192,7 @@ function UploadView() {
             className="mt-1 size-4 shrink-0 accent-[var(--color-water)]"
           />
           <span>
-            I confirm these files are new: not already in this archive or published online, and mine to share.
+            I confirm these files are new, or openly licensed and credited, and that I have the right to share them.
           </span>
         </label>
       </div>
@@ -230,7 +244,7 @@ function UploadView() {
             </h2>
             {finished > 0 && (
               <button
-                onClick={() => setItems((l) => l.filter((i) => !["done", "failed", "rejected"].includes(i.phase)))}
+                onClick={() => setItems((l) => l.filter((i) => !["done", "duplicate", "failed", "rejected"].includes(i.phase)))}
                 className="text-sm text-dust underline-offset-2 hover:text-ink hover:underline"
               >
                 Clear finished
@@ -292,6 +306,6 @@ function UploadView() {
 
 function StatusDot({ phase }: { phase: Phase }) {
   const color =
-    phase === "done" ? "bg-water" : phase === "failed" || phase === "rejected" ? "bg-rust" : phase === "queued" ? "bg-dust/50" : "bg-ochre";
+    phase === "done" ? "bg-water" : phase === "failed" || phase === "rejected" ? "bg-rust" : phase === "queued" || phase === "duplicate" ? "bg-dust/50" : "bg-ochre";
   return <span aria-hidden="true" className={`inline-block size-2 shrink-0 rounded-full ${color}`} />;
 }

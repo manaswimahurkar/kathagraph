@@ -777,7 +777,7 @@ function placeClass(style: MapStyle, kind: "sea" | "region" | "town") {
 /** Layer switcher, like the one in Google Maps. Light/dark is in the site header. */
 function StyleSwitcher({ current, onChange, status }: { current: MapBase; onChange: (b: MapBase) => void; status: Status }) {
   return (
-    <div className="pointer-events-auto absolute right-3 top-[7.5rem] flex flex-col items-end gap-2 sm:bottom-8 sm:right-28 sm:top-auto">
+    <div className="pointer-events-auto absolute bottom-10 right-3 flex flex-col items-end gap-2 sm:bottom-8 sm:right-28">
       <div
         role="radiogroup"
         aria-label="Map style"
