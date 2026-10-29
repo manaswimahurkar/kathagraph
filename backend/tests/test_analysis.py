@@ -92,3 +92,8 @@ def test_field_visit_todo_lists_gaps_then_disagreements():
     assert todo[0] == {"kind": "document", "item": "interior_photo", "text": "Interior / structural photograph"}
     assert todo[1]["kind"] == "verify"
     assert todo[1]["text"] == "Check the date of construction on site: sources say 1498 / 1499"
+
+
+def test_location_wording_is_not_a_conflict():
+    found = conflicts([claim(1, "location", "Pavagadh", SRC_A), claim(2, "location", "Pavagadh Hill, Panchmahal", SRC_B)])
+    assert found == []

@@ -13,8 +13,10 @@ FIELDS = [
     "built_date", "builder", "dynasty", "location",
     "architectural_style", "material", "purpose", "inscription",
 ]
-# Fields where two different values from two sources = a genuine conflict
-SINGLE_VALUED = {"built_date", "builder", "dynasty", "location"}
+# Fields where two different values from two sources = a genuine conflict.
+# "location" is left out: sources describe the same place at different levels of detail
+# ("Pavagadh" vs "Pavagadh Hill, Panchmahal") or in different scripts, and the map uses GPS anyway.
+SINGLE_VALUED = {"built_date", "builder", "dynasty"}
 ENTITY_TYPES = ["monument", "motif", "craft", "place", "person"]
 PHOTO_TAGS = ["exterior_photo", "interior_photo", "inscription", "carving_detail", "other"]
 MAX_TEXT = 12000

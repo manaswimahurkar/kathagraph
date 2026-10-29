@@ -30,7 +30,7 @@ export default function HomePage() {
                 to add the first.
               </>
             ) : (
-              `${entities.length} ${entities.length === 1 ? "monument" : "monuments"} on the map. Click one to see what the archive knows.`
+              `${entities.length - unmapped.length} ${entities.length - unmapped.length === 1 ? "monument" : "monuments"} on the map. Click one to see what the archive knows.`
             ))}
         </p>
 
@@ -45,9 +45,11 @@ export default function HomePage() {
         )}
 
         {unmapped.length > 0 && (
-          <div className="mt-2 border-t border-line pt-2 text-[13px]">
-            <p className="text-dust">Not on the map yet (no GPS):</p>
-            <ul className="mt-1 flex flex-wrap gap-1.5">
+          <details className="mt-2 border-t border-line pt-2 text-[13px]">
+            <summary className="cursor-pointer text-dust hover:text-ink">
+              {unmapped.length} more {unmapped.length === 1 ? "site needs" : "sites need"} a GPS location
+            </summary>
+            <ul className="mt-1.5 flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
               {unmapped.map((e) => (
                 <li key={e.id}>
                   <Link href={`/monument/${e.id}`} className="rounded-full border border-line px-2.5 py-0.5 text-ink hover:border-ink/40">
@@ -56,7 +58,7 @@ export default function HomePage() {
                 </li>
               ))}
             </ul>
-          </div>
+          </details>
         )}
       </div>
     </div>
