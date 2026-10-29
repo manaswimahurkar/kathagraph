@@ -1,5 +1,5 @@
 // Map styles for the 3D relief of Gujarat, like the layer switcher in Google Maps.
-// "Ancient" is drawn by our own shader. The others drape map imagery over the same 3D terrain.
+// "Ancient" is drawn by our own shader. "Satellite" drapes imagery over the same 3D terrain.
 
 import { TERRAIN_BBOX, tileXAt, tileYAt } from "./terrain";
 
@@ -28,12 +28,9 @@ export interface MapStyle {
 export const MAP_BASES: { id: MapBase; label: string }[] = [
   { id: "ancient", label: "Ancient" },
   { id: "satellite", label: "Satellite" },
-  { id: "map", label: "Map" },
 ];
 
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
-const CARTO = (name: string) => `https://{s}.basemaps.cartocdn.com/rastertiles/${name}/{z}/{x}/{y}.png`;
-const OSM_CARTO = "© OpenStreetMap contributors © CARTO";
 
 const STYLES: Record<string, Omit<MapStyle, "key" | "base" | "theme">> = {
   "ancient-dark": {
@@ -55,16 +52,6 @@ const STYLES: Record<string, Omit<MapStyle, "key" | "base" | "theme">> = {
     tiles: ESRI, attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
     background: "#d9e1e7", table: "#c4cfd8", grid: "#7d8d9a", wallTop: "#5b5a50", wallSide: "#3f3e37",
     tint: [1, 1, 1], land: "white", sea: "slate",
-  },
-  "map-dark": {
-    tiles: CARTO("dark_nolabels"), attribution: OSM_CARTO,
-    background: "#0b0d10", table: "#101317", grid: "#4b5560", wallTop: "#2a2d31", wallSide: "#16181b",
-    tint: [1, 1, 1], land: "white", sea: "white",
-  },
-  "map-light": {
-    tiles: CARTO("voyager_nolabels"), attribution: OSM_CARTO,
-    background: "#d6e4ec", table: "#b5d0de", grid: "#ffffff", wallTop: "#e4ddd0", wallSide: "#b9ae9c",
-    tint: [1, 1, 1], land: "slate", sea: "slate",
   },
 };
 

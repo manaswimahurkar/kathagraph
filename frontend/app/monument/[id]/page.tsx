@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import Model3D from "@/components/Model3D";
 import PhotoGallery from "@/components/PhotoGallery";
 import SiteWalkthrough from "@/components/SiteWalkthrough";
 import { EmptyState, ErrorState, Skeleton } from "@/components/States";
 import { ApiError, getEntity, setClaimStatus } from "@/lib/api";
 import { comparisonRows, corroborated, fieldOnly, MONUMENT_CHECKLIST, summarise } from "@/lib/insights";
+import { modelsFor } from "@/lib/models";
 import { fieldLabel, tagLabel, type Claim, type ClaimStatus, type EntityDetail } from "@/lib/types";
 
 type State =
@@ -84,8 +86,11 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
   const citation = new Map(entity.sources.map((s, i) => [s.id, i + 1]));
   const disputed = new Set(entity.conflicts.map((c) => c.field));
 
+  const models = modelsFor(entity.name, entity.aliases.map((a) => a.alias));
+
   return (
     <article className="mt-5">
+      <Model3D name={entity.name} models={models} />
       <header className="pb-8">
         <p className="text-[13px] tracking-wide text-ochre">Record no. {String(entity.id).padStart(3, "0")}</p>
         <h1 className="mt-1 font-display text-[2.6rem] leading-[1.05] sm:text-6xl">{entity.name}</h1>

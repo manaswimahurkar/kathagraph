@@ -5,7 +5,7 @@
 
 import { useSyncExternalStore } from "react";
 
-export type MapBase = "ancient" | "satellite" | "map";
+export type MapBase = "ancient" | "satellite";
 export type Theme = "light" | "dark";
 
 interface Prefs {
@@ -20,7 +20,7 @@ function read(): Prefs {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Prefs>;
     return {
-      base: raw.base === "satellite" || raw.base === "map" ? raw.base : DEFAULTS.base,
+      base: raw.base === "satellite" ? "satellite" : DEFAULTS.base,
       theme: raw.theme === "light" ? "light" : DEFAULTS.theme,
     };
   } catch {
