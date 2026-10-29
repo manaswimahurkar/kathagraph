@@ -102,3 +102,21 @@ insert into checklist_items (entity_type, required_item, label) values
   ('monument','builder','Builder / patron'),
   ('monument','location','Reliable GPS location')
 on conflict do nothing;
+
+-- Map pin precision: 'approximate' when the location is that of a parent complex
+alter table entities add column if not exists coord_precision text check (coord_precision in ('exact','approximate'));
+
+-- 3D models of a monument: an embedded Sketchfab model or an uploaded glTF file
+create table if not exists models (
+  id          bigserial primary key,
+  entity_id   bigint not null references entities(id) on delete cascade,
+  provider    text not null check (provider in ('sketchfab','file')),
+  uid         text,                 -- Sketchfab model id (32 hex)
+  url         text,                 -- public URL of an uploaded .glb/.gltf
+  title       text not null,
+  author      text,
+  author_url  text,
+  licence     text,
+  created_at  timestamptz not null default now()
+);
+alter table models enable row level security;

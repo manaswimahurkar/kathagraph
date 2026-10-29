@@ -1,8 +1,9 @@
 """API routes for monuments (entities), their claims, conflicts and gaps."""
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from . import analysis, matching
+from . import analysis, matching, models3d
+from .storage import StorageError, upload_bytes
 from .db import get_conn
 from .pipeline import reprocess_source
 from . import wiki
@@ -13,9 +14,19 @@ CLAIM_STATUSES = {"unverified", "verified", "rejected"}
 
 
 def _entity_detail(conn, entity_id: int) -> dict | None:
-    ent = conn.execute("select id, name, type, lat, lng from entities where id = %s", (entity_id,)).fetchone()
+    ent = conn.execute(
+        "select id, name, type, lat, lng, coord_precision from entities where id = %s", (entity_id,)
+    ).fetchone()
     if not ent:
         return None
+    ent["category"] = models3d.category_for(ent["name"])
+    if ent["lat"] is not None and not ent["coord_precision"]:
+        ent["coord_precision"] = "exact"
+    models = conn.execute(
+        """select id, provider, uid, url, title, author, author_url, licence
+           from models where entity_id = %s order by id""",
+        (entity_id,),
+    ).fetchall()
     aliases = conn.execute(
         "select alias, language from entity_aliases where entity_id = %s and alias <> %s order by language, alias",
         (entity_id, ent["name"]),
@@ -53,6 +64,7 @@ def _entity_detail(conn, entity_id: int) -> dict | None:
         "conflicts": analysis.conflicts(claims),
         "gaps": analysis.gaps(checklist, claims, sources, ent["lat"] is not None),
         "sources": sources,
+        "models": models,
     }
 
 
@@ -60,7 +72,7 @@ def _all_details(conn, etype: str | None) -> list[dict]:
     """Claims, sources, conflicts and gaps for many entities in 4 queries in total
     (instead of 4 per entity), so the map and the priorities page stay fast as the archive grows."""
     ents = conn.execute(
-        "select id, name, type, lat, lng from entities where (%s::text is null or type = %s) order by name",
+        "select id, name, type, lat, lng, coord_precision from entities where (%s::text is null or type = %s) order by name",
         (etype, etype),
     ).fetchall()
     if not ents:
@@ -102,6 +114,8 @@ def list_entities(type: str | None = None):
     return {"entities": [
         {
             "id": d["id"], "name": d["name"], "type": d["type"], "lat": d["lat"], "lng": d["lng"],
+            "category": models3d.category_for(d["name"]),
+            "coord_precision": d["coord_precision"] or ("exact" if d["lat"] is not None else None),
             "n_sources": len(d["sources"]), "n_claims": len(d["claims"]),
             "n_conflicts": len(d["conflicts"]), "n_gaps": len(d["gaps"]),
         }
@@ -190,6 +204,7 @@ class EntityPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     lat: float | None = Field(default=None, ge=-90, le=90)
     lng: float | None = Field(default=None, ge=-180, le=180)
+    coord_precision: str | None = None
 
 
 @router.patch("/entities/{entity_id}")
@@ -202,8 +217,63 @@ def update_entity(entity_id: int, body: EntityPatch):
             matching.add_aliases(conn, entity_id, [body.name])
         if body.lat is not None and body.lng is not None:
             conn.execute("update entities set lat = %s, lng = %s where id = %s", (body.lat, body.lng, entity_id))
+        if body.coord_precision is not None:
+            if body.coord_precision not in ("exact", "approximate"):
+                raise HTTPException(400, "coord_precision must be exact or approximate.")
+            conn.execute("update entities set coord_precision = %s where id = %s", (body.coord_precision, entity_id))
         matching.relink_unlinked_photos(conn)
         return _entity_detail(conn, entity_id)
+
+
+MODEL_FIELDS = "id, provider, uid, url, title, author, author_url, licence"
+
+
+@router.post("/entities/{entity_id}/models", status_code=201)
+async def add_model(entity_id: int, request: Request):
+    """Attach a 3D model to a monument: JSON {"sketchfab_url": "..."} or a multipart field "file" (.glb/.gltf)."""
+    with get_conn() as conn:
+        if not conn.execute("select 1 from entities where id = %s", (entity_id,)).fetchone():
+            raise HTTPException(404, "Monument not found.")
+
+    if request.headers.get("content-type", "").startswith("multipart/"):
+        form = await request.form()
+        upload = form.get("file")
+        if upload is None or not hasattr(upload, "read"):
+            raise HTTPException(400, "Send the model in a form field called 'file'.")
+        name = upload.filename or "model.glb"
+        if not name.lower().endswith(models3d.ALLOWED_MODEL_FILES):
+            raise HTTPException(400, "Only .glb or .gltf 3D files are accepted.")
+        data = await upload.read()
+        if not data:
+            raise HTTPException(400, "That file is empty.")
+        if len(data) > models3d.MAX_MODEL_BYTES:
+            raise HTTPException(413, "3D files can be at most 50 MB.")
+        mime = "model/gltf-binary" if name.lower().endswith(".glb") else "model/gltf+json"
+        try:
+            url = upload_bytes(data, name, mime)
+        except StorageError as e:
+            raise HTTPException(502, f"Couldn't store the file: {e}")
+        title = str(form.get("title") or name.rsplit(".", 1)[0]).strip()[:200]
+        row = ("file", None, url, title, form.get("author") or None, None, form.get("licence") or None)
+    else:
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(400, 'Send JSON like {"sketchfab_url": "https://sketchfab.com/3d-models/..."} or a .glb file.')
+        try:
+            uid = models3d.sketchfab_uid(str((body or {}).get("sketchfab_url", "")))
+            info = models3d.sketchfab_info(uid)
+        except models3d.ModelError as e:
+            raise HTTPException(400, str(e))
+        row = ("sketchfab", uid, None, info["title"], info["author"], info["author_url"], info["licence"])
+
+    with get_conn() as conn:
+        model = conn.execute(
+            f"""insert into models (entity_id, provider, uid, url, title, author, author_url, licence)
+                values (%s, %s, %s, %s, %s, %s, %s, %s) returning {MODEL_FIELDS}""",
+            (entity_id, *row),
+        ).fetchone()
+    return model
 
 
 class ClaimPatch(BaseModel):

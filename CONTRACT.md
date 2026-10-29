@@ -155,3 +155,19 @@ All of these are live; the shapes above are unchanged, only extra fields were ad
 - `GET /entities` → each monument also has `n_claims`.
 - `GET /entities/{id}` → each source has `tag` (`exterior_photo` / `interior_photo` / `inscription` / `carving_detail` / `other`), `description` (AI description of a photo, label it as AI), `lat`, `lng`, `status`; each conflict claim has `status`.
 - `sources[].status` while processing: `pending` → `processing` → `done` | `failed`. When `done`, `error` may hold a warning (e.g. "OCR skipped"); show it as a note, not a failure.
+
+---
+
+## Added Thu afternoon (backend v0.7)
+
+| Endpoint | What it does |
+|---|---|
+| `POST /import/wikipedia` | Body `{ "titles": ["Rani ki vav"], "hindi": true }` → `202 { queued: [...] }`. Imports English (+ Hindi) Wikipedia text as sources of type `web` (CC BY-SA, attribution in the stored text), runs extraction, links to the monument, sets coordinates. |
+| `GET /priorities` | Monuments ranked by fieldwork needed: `{ totals: {monuments, missing_items, disagreements}, monuments: [{ id, name, lat, lng, n_sources, n_gaps, n_conflicts, todo: [{ kind: "document" \| "verify", item, text }] }] }` |
+| `POST /entities/{id}/models` | JSON `{ "sketchfab_url": "..." }` or multipart field `file` (.glb/.gltf, ≤ 50 MB) → `201 { id, provider: "sketchfab" \| "file", uid, url, title, author, author_url, licence }`. 400 bad link/file type, 413 too large, 404 unknown monument. |
+
+**New fields**
+- `GET /entities` and `GET /entities/{id}`: `category` (`temple | stepwell | fort | mosque | tomb | cave | lake | palace | museum | site`, from the name) and `coord_precision` (`"exact" | "approximate" | null` when no location).
+- `GET /entities/{id}`: `models: [...]` (same shape as the POST response).
+- `PATCH /entities/{id}`: also accepts `coord_precision`.
+- Source `type` can be `web` (published reference, never a field record).
