@@ -809,10 +809,22 @@ export default function GujaratMap3D({
               ev.stopPropagation();
               pick(e.id);
             }}
-            className={`absolute left-0 top-0 whitespace-nowrap rounded-sm border border-[#e8c27a]/60 bg-[#1f160e]/85 px-2.5 py-1 font-display text-[14px] text-[#f6e7c8] shadow-[0_4px_14px_rgb(0_0_0/0.4)] transition-[opacity,background-color] duration-300 hover:bg-[#3a2814] ${
-              interactive ? "pointer-events-auto cursor-pointer" : ""
-            } ${selected === e.id ? "ring-2 ring-[#e8a33c]" : ""}`}
+            title={
+              e.coord_precision === "approximate"
+                ? "Rare site: no public record of its exact location. Shown at the larger site it belongs to."
+                : undefined
+            }
+            className={`absolute left-0 top-0 whitespace-nowrap rounded-sm border px-2.5 py-1 font-display text-[14px] shadow-[0_4px_14px_rgb(0_0_0/0.4)] transition-[opacity,background-color] duration-300 ${
+              e.coord_precision === "approximate"
+                ? "border-dashed border-[#8fc7bf]/80 bg-[#14231f]/85 text-[#cfe9e4] hover:bg-[#1d3530]"
+                : "border-[#e8c27a]/60 bg-[#1f160e]/85 text-[#f6e7c8] hover:bg-[#3a2814]"
+            } ${interactive ? "pointer-events-auto cursor-pointer" : ""} ${selected === e.id ? "ring-2 ring-[#e8a33c]" : ""}`}
           >
+            {e.coord_precision === "approximate" && (
+              <span aria-label="Rare site, approximate location" className="mr-1.5 text-[#8fc7bf]">
+                ◌
+              </span>
+            )}
             {e.name}
             {e.n_conflicts > 0 && <span className="ml-1.5 text-[#e8a33c]">◆</span>}
           </button>
@@ -970,6 +982,13 @@ function MonumentPopup({
       </button>
       <p className="text-[12px] tracking-wide text-ochre">Record no. {String(entity.id).padStart(3, "0")}</p>
       <h2 className="pr-8 font-display text-2xl leading-tight text-ink">{entity.name}</h2>
+      {entity.coord_precision === "approximate" && (
+        <p className="mt-1.5 rounded border border-dashed border-water/60 bg-water-soft/40 px-2 py-1 text-[13px] text-ink">
+          <span className="mr-1 text-water">◌</span>
+          <b>Rare site:</b> no public record of its exact location. Shown at the larger site it belongs to; a GPS photo
+          from a field visit would fix it.
+        </p>
+      )}
       {detail && detail.aliases.length > 0 && (
         <p className="mt-0.5 text-[13px] text-dust">
           {detail.aliases.map((a, i) => (
