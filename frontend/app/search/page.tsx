@@ -151,7 +151,7 @@ function ResultCard({ result, query }: { result: SearchResult; query: string }) 
       </div>
 
       <p className="mt-2 font-serif text-[17px] leading-relaxed">
-        <Highlight text={result.text} query={query} />
+        <Highlight text={tidyPassage(result.text)} query={query} />
       </p>
 
       <p className="mt-3 text-[13px] text-dust">
@@ -167,6 +167,32 @@ function ResultCard({ result, query }: { result: SearchResult; query: string }) 
       </p>
     </li>
   );
+}
+
+/**
+ * Passages are cut from longer texts with some overlap, so one can begin or end mid-word.
+ * Trim to the nearest sentence (or word) at each end, drop wiki "== Heading ==" marks,
+ * and show "…" where text was cut.
+ */
+function tidyPassage(raw: string): string {
+  let t = raw.replace(/={2,}/g, " ").replace(/\s+/g, " ").trim();
+  const ends = (s: string) => [...s.matchAll(/[.!?\u0964]["”’)\]]?(?=\s|$)/g)].map((m) => m.index! + m[0].length);
+
+  // Start: lowercase or punctuation first means the cut fell mid-sentence (or mid-word)
+  if (/^[a-z0-9,;:)\-]/.test(t)) {
+    const first = ends(t.slice(0, 250))[0];
+    const cut = first ?? t.indexOf(" ");
+    if (cut > 0) t = "… " + t.slice(cut).trim();
+  }
+
+  // End: stop at the last full sentence if one ends near the end, else at a whole word
+  if (!/[.!?\u0964"”’)\]…]$/.test(t)) {
+    const from = Math.max(0, t.length - 120);
+    const last = ends(t.slice(from)).pop();
+    if (last !== undefined) t = t.slice(0, from + last) + " …";
+    else if (t.lastIndexOf(" ") > 0) t = t.slice(0, t.lastIndexOf(" ")) + " …";
+  }
+  return t;
 }
 
 // Small words that would light up every passage if highlighted
