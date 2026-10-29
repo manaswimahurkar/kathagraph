@@ -5,6 +5,8 @@ it came from, its method and a confidence, and starts as "unverified" until a
 researcher verifies or rejects it. The AI never decides what is true; where
 sources disagree, both claims are kept and shown side by side.
 """
+import re
+
 from . import gemini
 
 FIELDS = [
@@ -16,6 +18,12 @@ SINGLE_VALUED = {"built_date", "builder", "dynasty", "location"}
 ENTITY_TYPES = ["monument", "motif", "craft", "place", "person"]
 PHOTO_TAGS = ["exterior_photo", "interior_photo", "inscription", "carving_detail", "other"]
 MAX_TEXT = 12000
+
+# The model's own confidence is not trusted on its own. A claim whose quoted
+# evidence really appears in the source is capped at 0.9 (a verbatim fact can
+# still be misread); one whose quote can't be found is capped at 0.5.
+MAX_CONF_QUOTE_FOUND = 0.9
+MAX_CONF_QUOTE_MISSING = 0.5
 
 CLAIMS_SCHEMA = {
     "type": "OBJECT",
@@ -83,6 +91,21 @@ PHOTO_PROMPT = """This photo comes from a field archive of Indian architectural 
 Do NOT guess the monument's name, date or history."""
 
 
+def _normalise(s: str) -> str:
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
+def quote_in_source(quote: str, text: str) -> bool:
+    """Does the AI's quoted evidence really occur in the source text?"""
+    q = _normalise(quote)
+    return len(q) >= 3 and q in _normalise(text)
+
+
+def calibrate(model_confidence: float, quote: str, text: str) -> float:
+    cap = MAX_CONF_QUOTE_FOUND if quote_in_source(quote, text) else MAX_CONF_QUOTE_MISSING
+    return round(min(model_confidence, cap), 2)
+
+
 def extract(text: str, filename: str) -> list[dict]:
     """Return [{name, type, aliases, claims:[{field, value, quote, confidence}]}]."""
     text = text.strip()[:MAX_TEXT]
@@ -104,8 +127,9 @@ def extract(text: str, filename: str) -> list[dict]:
                     conf = max(0.0, min(1.0, float(c.get("confidence", 0.5))))
                 except (TypeError, ValueError):
                     conf = 0.5
+                quote = str(c.get("quote", "")).strip()
                 claims.append({"field": c["field"], "value": value,
-                               "quote": str(c.get("quote", "")).strip(), "confidence": conf})
+                               "quote": quote, "confidence": calibrate(conf, quote, text)})
         entities.append({
             "name": name,
             "type": ent.get("type") if ent.get("type") in ENTITY_TYPES else "monument",
