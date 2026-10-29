@@ -56,21 +56,57 @@ def _entity_detail(conn, entity_id: int) -> dict | None:
     }
 
 
+def _all_details(conn, etype: str | None) -> list[dict]:
+    """Claims, sources, conflicts and gaps for many entities in 4 queries in total
+    (instead of 4 per entity), so the map and the priorities page stay fast as the archive grows."""
+    ents = conn.execute(
+        "select id, name, type, lat, lng from entities where (%s::text is null or type = %s) order by name",
+        (etype, etype),
+    ).fetchall()
+    if not ents:
+        return []
+    ids = [e["id"] for e in ents]
+    claims_by: dict[int, list] = {i: [] for i in ids}
+    for r in conn.execute(
+        """select c.id, c.entity_id, c.field, c.value, c.status, s.id as source_id, s.filename
+           from claims c join sources s on s.id = c.source_id where c.entity_id = any(%s)""",
+        (ids,),
+    ).fetchall():
+        claims_by[r["entity_id"]].append({
+            "id": r["id"], "field": r["field"], "value": r["value"], "status": r["status"],
+            "source": {"id": r["source_id"], "filename": r["filename"]},
+        })
+    sources_by: dict[int, list] = {i: [] for i in ids}
+    for r in conn.execute(
+        "select es.entity_id, es.source_id, es.tag from entity_sources es where es.entity_id = any(%s)", (ids,)
+    ).fetchall():
+        sources_by[r["entity_id"]].append({"id": r["source_id"], "tag": r["tag"]})
+    checklists: dict[str, list] = {}
+    for r in conn.execute("select entity_type, required_item, label from checklist_items order by id").fetchall():
+        checklists.setdefault(r["entity_type"], []).append(r)
+    out = []
+    for e in ents:
+        claims, sources = claims_by[e["id"]], sources_by[e["id"]]
+        out.append({
+            **e, "claims": claims, "sources": sources,
+            "conflicts": analysis.conflicts(claims),
+            "gaps": analysis.gaps(checklists.get(e["type"], []), claims, sources, e["lat"] is not None),
+        })
+    return out
+
+
 @router.get("/entities")
 def list_entities(type: str | None = None):
     with get_conn() as conn:
-        ids = conn.execute(
-            "select id from entities where (%s::text is null or type = %s) order by name", (type, type)
-        ).fetchall()
-        out = []
-        for row in ids:
-            d = _entity_detail(conn, row["id"])
-            out.append({
-                "id": d["id"], "name": d["name"], "type": d["type"], "lat": d["lat"], "lng": d["lng"],
-                "n_sources": len(d["sources"]), "n_claims": len(d["claims"]),
-                "n_conflicts": len(d["conflicts"]), "n_gaps": len(d["gaps"]),
-            })
-    return {"entities": out}
+        details = _all_details(conn, type)
+    return {"entities": [
+        {
+            "id": d["id"], "name": d["name"], "type": d["type"], "lat": d["lat"], "lng": d["lng"],
+            "n_sources": len(d["sources"]), "n_claims": len(d["claims"]),
+            "n_conflicts": len(d["conflicts"]), "n_gaps": len(d["gaps"]),
+        }
+        for d in details
+    ]}
 
 
 @router.get("/entities/{entity_id}")
@@ -109,16 +145,15 @@ def priorities(limit: int = 100):
     (missing documentation first, then unresolved disagreements, then fewest sources)."""
     limit = max(1, min(limit, 200))
     with get_conn() as conn:
-        ids = conn.execute("select id from entities where type = 'monument' order by id").fetchall()
-        rows = []
-        for r in ids:
-            d = _entity_detail(conn, r["id"])
-            todo = build_todo(d)
-            rows.append({
-                "id": d["id"], "name": d["name"], "lat": d["lat"], "lng": d["lng"],
-                "n_sources": len(d["sources"]), "n_gaps": len(d["gaps"]), "n_conflicts": len(d["conflicts"]),
-                "todo": todo,
-            })
+        details = _all_details(conn, "monument")
+    rows = [
+        {
+            "id": d["id"], "name": d["name"], "lat": d["lat"], "lng": d["lng"],
+            "n_sources": len(d["sources"]), "n_gaps": len(d["gaps"]), "n_conflicts": len(d["conflicts"]),
+            "todo": build_todo(d),
+        }
+        for d in details
+    ]
     rows.sort(key=lambda x: (-x["n_gaps"], -x["n_conflicts"], x["n_sources"], x["name"]))
     return {
         "monuments": rows[:limit],
