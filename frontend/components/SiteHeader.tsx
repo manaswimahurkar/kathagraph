@@ -5,9 +5,10 @@ import { usePathname } from "next/navigation";
 import { USE_MOCK } from "@/lib/api";
 import { usePrefs } from "@/lib/prefs";
 
-const NAV = [
+const NAV: { href: string; label: string; short?: string }[] = [
   { href: "/", label: "Map" },
   { href: "/search", label: "Search" },
+  { href: "/next", label: "Field visits", short: "Visits" },
   { href: "/upload", label: "Upload" },
 ];
 
@@ -31,16 +32,16 @@ export default function SiteHeader() {
           Showing demo data for three Gujarat stepwells. It is illustrative, not an archival record.
         </p>
       )}
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:px-4">
         <Link href="/" className="flex shrink-0 items-center gap-2 text-ink sm:gap-2.5">
           <StepsMark className="h-4 w-6 sm:h-5 sm:w-7" />
-          <span className="font-display text-xl leading-none tracking-wide sm:text-[22px]">KathaGraph</span>
+          <span className="font-display text-lg leading-none tracking-wide max-[400px]:hidden sm:text-[22px]">KathaGraph</span>
           <span lang="hi" className="hidden font-display text-base leading-none text-ochre sm:inline">
             कथा
           </span>
         </Link>
         <nav aria-label="Main">
-          <ul className="flex items-center gap-0.5 text-[15px] sm:gap-1">
+          <ul className="flex items-center text-[14px] sm:gap-1 sm:text-[15px]">
             {NAV.map((n) => {
               const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
               return (
@@ -48,11 +49,18 @@ export default function SiteHeader() {
                   <Link
                     href={n.href}
                     aria-current={active ? "page" : undefined}
-                    className={`rounded px-2 py-1.5 transition-colors sm:px-3 ${
+                    className={`whitespace-nowrap rounded px-1.5 py-1.5 transition-colors sm:px-3 ${
                       active ? "bg-ink text-paper" : "text-dust hover:bg-sand hover:text-ink"
                     }`}
                   >
-                    {n.label}
+                    {n.short ? (
+                      <>
+                        <span className="sm:hidden">{n.short}</span>
+                        <span className="hidden sm:inline">{n.label}</span>
+                      </>
+                    ) : (
+                      n.label
+                    )}
                   </Link>
                 </li>
               );
@@ -63,7 +71,7 @@ export default function SiteHeader() {
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                 aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
                 title={theme === "dark" ? "Light mode" : "Dark mode"}
-                className="ml-1 grid size-9 place-items-center rounded text-dust hover:bg-sand hover:text-ink"
+                className="ml-0.5 grid size-8 place-items-center sm:ml-1 sm:size-9 rounded text-dust hover:bg-sand hover:text-ink"
               >
                 {theme === "dark" ? (
                   <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">

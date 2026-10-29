@@ -133,6 +133,28 @@ export interface EntityDetail {
   sources: EntitySource[];
 }
 
+/** GET /priorities — the archive as a to-do list for the next field visit. Already sorted: most work first. */
+export interface PriorityTodo {
+  /** "document": evidence that's missing. "verify": sources disagree, so check it on site. */
+  kind: "document" | "verify";
+  item: string; // e.g. exterior_photo, built_date
+  text: string; // human-readable, ready to show
+}
+export interface PriorityMonument {
+  id: number;
+  name: string;
+  lat: number | null;
+  lng: number | null;
+  n_sources: number;
+  n_gaps: number;
+  n_conflicts: number;
+  todo: PriorityTodo[];
+}
+export interface PrioritiesResponse {
+  totals: { monuments: number; missing_items: number; disagreements: number };
+  monuments: PriorityMonument[];
+}
+
 /** PATCH /claims/{id} */
 export interface ClaimStatusResponse {
   id: number;
