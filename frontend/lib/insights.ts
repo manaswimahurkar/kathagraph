@@ -108,3 +108,31 @@ export function comparisonRows(e: EntityDetail, field: string): ComparisonRow[] 
     answer: answers.indexOf(cc.value),
   }));
 }
+
+// ---------- Web vs field: what's already online, and what's new ----------
+
+/** Where a source came from: imported from the web, or contributed from the field. */
+export function originOf(s: EntitySource): "web" | "field" {
+  if (s.origin === "web" || s.origin === "field") return s.origin;
+  return s.type === "web" || s.tag === "reference" ? "web" : "field";
+}
+
+export type Novelty = "web" | "new" | "also-online";
+
+/**
+ * For each fact: "web" if it came from an imported web source; "new" if a contributor added it and
+ * no web source says the same; "also-online" if a contributor's fact matches what the web already says.
+ */
+export function novelty(e: EntityDetail): Map<number, Novelty> {
+  const origin = new Map(e.sources.map((s) => [s.id, originOf(s)]));
+  const norm = (v: string) => v.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const online = new Set(
+    e.claims.filter((c) => origin.get(c.source.id) === "web").map((c) => `${c.field}|${norm(c.value)}`),
+  );
+  const out = new Map<number, Novelty>();
+  for (const c of e.claims) {
+    if (origin.get(c.source.id) === "web") out.set(c.id, "web");
+    else out.set(c.id, online.has(`${c.field}|${norm(c.value)}`) ? "also-online" : "new");
+  }
+  return out;
+}

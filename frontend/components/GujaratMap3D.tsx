@@ -10,13 +10,15 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { GUJARAT_OUTLINE, project } from "@/lib/geo";
+import { GUJARAT_OUTLINE, project, unproject } from "@/lib/geo";
 import { getEntity } from "@/lib/api";
 import { imageryUVs, loadImagery, MAP_BASES, resolveStyle, type Imagery, type MapStyle } from "@/lib/mapStyles";
 import { usePrefs, type MapBase } from "@/lib/prefs";
 import { buildTerrain, type ElevationSource, type Terrain } from "@/lib/terrain";
 import { fieldLabel, type EntityDetail, type EntitySummary } from "@/lib/types";
 import { CountChips } from "./CountChips";
+import { Structure } from "./Structures";
+import { categoryOf } from "@/lib/structures";
 
 export type MapView =
   | { kind: "home" }
@@ -251,7 +253,7 @@ function Table({ style }: { style: MapStyle }) {
   );
 }
 
-/** A beam of light and a pulsing ring over each monument. */
+/** A small 3D model of each monument on its spot, with a beam of light and a pulsing ring. */
 function Markers({
   points,
   heightAt,
@@ -290,17 +292,16 @@ function Markers({
               onPick(e.id);
             }}
           >
-            <mesh position={[0, on ? 2.4 : 1.6, 0]}>
-              <cylinderGeometry args={[0.04, on ? 0.18 : 0.13, on ? 4.8 : 3.2, 12, 1, true]} />
+            <group scale={on ? 1.7 : 1.25} rotation-y={(e.id * 1.7) % Math.PI}>
+              <Structure kind={categoryOf(e.name, e.category)} highlight={on} />
+            </group>
+            <mesh position={[0, on ? 3.4 : 2.6, 0]}>
+              <cylinderGeometry args={[0.03, on ? 0.12 : 0.08, on ? 3.6 : 2.6, 12, 1, true]} />
               <meshBasicMaterial color={color} transparent opacity={on ? 0.85 : 0.6} blending={THREE.AdditiveBlending} depthWrite={false} />
             </mesh>
             <mesh rotation-x={-Math.PI / 2} position={[0, 0.03, 0]} ref={(m) => void (m && (rings.current[i] = m))}>
-              <ringGeometry args={[0.18, 0.24, 32]} />
+              <ringGeometry args={[0.62, 0.7, 40]} />
               <meshBasicMaterial color={color} transparent opacity={0.7} depthWrite={false} />
-            </mesh>
-            <mesh position={[0, 0.06, 0]}>
-              <sphereGeometry args={[on ? 0.16 : 0.11, 16, 12]} />
-              <meshBasicMaterial color={color} />
             </mesh>
           </group>
         );
@@ -320,6 +321,19 @@ interface Orbit {
 }
 
 const HOME: Omit<Orbit, "target"> = { az: 0.3, pol: 0.78, dist: 96 };
+const MIN_DIST = 6;
+const MAX_DIST = 130;
+/** Just short of 90°: lets you tilt right down to a horizontal view along the land. */
+const MAX_POL = 1.53;
+const PAN_LIMIT = 70;
+const MOVE_KEYS = new Set(["w", "a", "s", "d", "q", "e", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
+/** Fired by the "Reset view" button; the camera rig listens for it. */
+export const RESET_EVENT = "kg-reset-view";
+
+function clampPan(v: THREE.Vector3) {
+  v.x = THREE.MathUtils.clamp(v.x, -PAN_LIMIT, PAN_LIMIT);
+  v.z = THREE.MathUtils.clamp(v.z, -PAN_LIMIT, PAN_LIMIT);
+}
 
 function CameraRig({
   view,
@@ -336,18 +350,38 @@ function CameraRig({
 }) {
   const { camera, gl, size } = useThree();
   const cur = useRef<Orbit>({ az: 0.9, pol: 0.5, dist: 120, target: new THREE.Vector3() });
-  const user = useRef({ ...HOME, lastInput: -10, dragging: false });
+  const user = useRef({ ...HOME, lastInput: -10, dragging: false, pan: new THREE.Vector3() });
+  const keys = useRef(new Set<string>());
   const clock = useRef(0);
+  /** Land height under a point on the map (x/z in map units). */
+  const groundAt = (x: number, z: number) => heightAt(...unproject(x, z));
 
-  // Drag to turn, wheel or pinch to zoom: only on the home page.
+  // Home page controls:
+  //   drag = turn and tilt (all the way down to a horizontal, eye-level view)
+  //   right-drag, Shift+drag or two fingers = move across the map
+  //   W A S D / arrow keys = walk forward, back and sideways; Q / E = turn
+  //   wheel or pinch = zoom;  R or "Reset view" = back to the start
   useEffect(() => {
     if (!interactive) return;
     const el = gl.domElement;
     const pointers = new Map<number, { x: number; y: number }>();
     let pinch = 0;
+    let panning = false;
+
+    /** Moves the view across the ground, relative to where the camera faces. */
+    const pan = (dx: number, dy: number) => {
+      const u = user.current;
+      const s = u.dist * 0.0016;
+      // screen right = (cos az, -sin az); screen up = away from the camera = (-sin az, -cos az)
+      u.pan.x += (-dx * Math.cos(u.az) - dy * Math.sin(u.az)) * s;
+      u.pan.z += (dx * Math.sin(u.az) - dy * Math.cos(u.az)) * s;
+      clampPan(u.pan);
+    };
+
     const down = (e: PointerEvent) => {
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       el.setPointerCapture(e.pointerId);
+      panning = e.button === 2 || e.shiftKey;
       user.current.dragging = true;
       user.current.lastInput = clock.current;
     };
@@ -356,16 +390,23 @@ function CameraRig({
       if (!p) return;
       const u = user.current;
       if (pointers.size === 2) {
+        // two fingers: pinch to zoom, and move together to slide the map
         const [a, b] = [...pointers.values()];
         const d0 = Math.hypot(a.x - b.x, a.y - b.y);
+        const m0 = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         const [c, d] = [...pointers.values()];
         const d1 = Math.hypot(c.x - d.x, c.y - d.y);
-        if (pinch && d0 > 0) u.dist = THREE.MathUtils.clamp(u.dist * (d0 / d1), 16, 120);
+        const m1 = { x: (c.x + d.x) / 2, y: (c.y + d.y) / 2 };
+        if (pinch && d0 > 0) u.dist = THREE.MathUtils.clamp(u.dist * (d0 / d1), MIN_DIST, MAX_DIST);
+        if (pinch) pan(m1.x - m0.x, m1.y - m0.y);
         pinch = d1;
+      } else if (panning) {
+        pan(e.clientX - p.x, e.clientY - p.y);
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       } else {
         u.az -= (e.clientX - p.x) * 0.005;
-        u.pol = THREE.MathUtils.clamp(u.pol - (e.clientY - p.y) * 0.004, 0.2, 1.22);
+        u.pol = THREE.MathUtils.clamp(u.pol - (e.clientY - p.y) * 0.004, 0.15, MAX_POL);
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       }
       u.lastInput = clock.current;
@@ -373,19 +414,53 @@ function CameraRig({
     const up = (e: PointerEvent) => {
       pointers.delete(e.pointerId);
       pinch = 0;
-      if (pointers.size === 0) user.current.dragging = false;
+      if (pointers.size === 0) {
+        user.current.dragging = false;
+        panning = false;
+      }
     };
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
       const u = user.current;
-      u.dist = THREE.MathUtils.clamp(u.dist * (1 + e.deltaY * 0.0012), 16, 120);
+      u.dist = THREE.MathUtils.clamp(u.dist * (1 + e.deltaY * 0.0012), MIN_DIST, MAX_DIST);
       u.lastInput = clock.current;
     };
+    const noMenu = (e: MouseEvent) => e.preventDefault(); // right-drag pans instead of opening a menu
+    const typing = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      return !!t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName));
+    };
+    const keydown = (e: KeyboardEvent) => {
+      if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === "r") {
+        reset();
+        return;
+      }
+      if (MOVE_KEYS.has(k)) {
+        keys.current.add(k);
+        user.current.lastInput = clock.current;
+        if (k.startsWith("arrow")) e.preventDefault(); // don't scroll the page
+      }
+    };
+    const keyup = (e: KeyboardEvent) => keys.current.delete(e.key.toLowerCase());
+    const blur = () => keys.current.clear();
+    const reset = () => {
+      Object.assign(user.current, HOME);
+      user.current.pan.set(0, 0, 0);
+      user.current.lastInput = clock.current;
+    };
+
     el.addEventListener("pointerdown", down);
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
     el.addEventListener("wheel", wheel, { passive: false });
+    el.addEventListener("contextmenu", noMenu);
+    window.addEventListener("keydown", keydown);
+    window.addEventListener("keyup", keyup);
+    window.addEventListener("blur", blur);
+    window.addEventListener(RESET_EVENT, reset);
     el.style.touchAction = "none";
     el.style.cursor = "grab";
     return () => {
@@ -394,6 +469,12 @@ function CameraRig({
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);
       el.removeEventListener("wheel", wheel);
+      el.removeEventListener("contextmenu", noMenu);
+      window.removeEventListener("keydown", keydown);
+      window.removeEventListener("keyup", keyup);
+      window.removeEventListener("blur", blur);
+      window.removeEventListener(RESET_EVENT, reset);
+      keys.current.clear();
       el.style.touchAction = "";
       el.style.cursor = "";
     };
@@ -408,12 +489,31 @@ function CameraRig({
 
     switch (view.kind) {
       case "home": {
+        // keyboard: walk forward/back/sideways relative to where the camera faces, Q/E to turn
+        const held = keys.current;
+        if (held.size > 0) {
+          const step = u.dist * 0.7 * dt;
+          let f = 0;
+          let r = 0;
+          if (held.has("w") || held.has("arrowup")) f += 1;
+          if (held.has("s") || held.has("arrowdown")) f -= 1;
+          if (held.has("d") || held.has("arrowright")) r += 1;
+          if (held.has("a") || held.has("arrowleft")) r -= 1;
+          if (held.has("q")) u.az += dt * 0.9;
+          if (held.has("e")) u.az -= dt * 0.9;
+          u.pan.x += (-f * Math.sin(u.az) + r * Math.cos(u.az)) * step;
+          u.pan.z += (-f * Math.cos(u.az) - r * Math.sin(u.az)) * step;
+          clampPan(u.pan);
+          u.lastInput = clock.current;
+        }
         // drift slowly when nobody has touched the map for a while
         if (!calm && !u.dragging && clock.current - u.lastInput > 5) u.az += dt * 0.025;
         want.az = u.az;
         want.pol = u.pol;
         want.dist = u.dist;
-        want.target.set(0, 0, 0);
+        want.target.copy(u.pan);
+        // stand on the land, not under it, when looking along the ground
+        want.target.y = Math.max(0, groundAt(u.pan.x, u.pan.z));
         if (wide) {
           // aim slightly left of centre so Gujarat clears the search box
           const shift = want.dist * 0.07;
@@ -457,8 +557,9 @@ function CameraRig({
         want.target.set(0, 0, 0);
     }
 
-    // Glide towards the wanted view (fast while dragging, slow for page changes).
-    const k = calm ? 1 : 1 - Math.exp(-dt * (u.dragging ? 12 : 1.8));
+    // Glide towards the wanted view (fast while you steer it, slow for page changes).
+    const steering = u.dragging || keys.current.size > 0;
+    const k = calm ? 1 : 1 - Math.exp(-dt * (steering ? 12 : 1.8));
     const c = cur.current;
     let dAz = want.az - c.az;
     dAz = Math.atan2(Math.sin(dAz), Math.cos(dAz)); // shortest way round
@@ -472,6 +573,9 @@ function CameraRig({
       c.target.y + c.dist * Math.cos(c.pol),
       c.target.z + c.dist * Math.sin(c.pol) * Math.cos(c.az),
     );
+    // keep the eye just above the ground at the flattest, eye-level angles
+    const floor = Math.max(0, groundAt(camera.position.x, camera.position.z)) + 0.6;
+    if (camera.position.y < floor) camera.position.y = floor;
     camera.lookAt(c.target);
   });
   return null;
@@ -497,13 +601,13 @@ function Projector({ pins }: { pins: React.RefObject<Pin[]> }) {
       const visible = v.z < 1 && Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2;
       const x = (v.x * 0.5 + 0.5) * size.width;
       let y = (-v.y * 0.5 + 0.5) * size.height;
-      // Monument labels must never cover each other: push a clashing one below the last.
-      if (p.key.startsWith("m-")) {
+      // Monument labels must never cover each other: a clashing one (lower priority) is hidden
+      // until zooming in makes room for it. The monument's 3D model stays visible.
+      let clash = false;
+      if (p.key.startsWith("m-") && visible) {
         const w = p.el.offsetWidth;
-        for (const q of placed) {
-          if (Math.abs(q.x - x) < (q.w + w) / 2 + 4 && Math.abs(q.y - y) < 30) y = q.y + 32;
-        }
-        placed.push({ x, y, w });
+        clash = placed.some((q) => Math.abs(q.x - x) < (q.w + w) / 2 + 4 && Math.abs(q.y - y) < 28);
+        if (!clash) placed.push({ x, y, w });
       }
       let px = x;
       if (p.key === "popup") {
@@ -515,7 +619,9 @@ function Projector({ pins }: { pins: React.RefObject<Pin[]> }) {
         y = y - 44 - h < 110 ? y + h + 24 : y - 44;
       }
       p.el.style.transform = `translate(-50%, -100%) translate(${px}px, ${y}px)`;
-      p.el.style.opacity = visible ? "" : "0";
+      const show = visible && !clash;
+      p.el.style.opacity = show ? "" : "0";
+      p.el.style.pointerEvents = show ? "" : "none";
     }
   });
   return null;
@@ -618,18 +724,21 @@ export default function GujaratMap3D({
       const y = p.kind === "town" ? heightAt(p.lon, p.lat) + 0.05 : p.kind === "sea" ? -0.85 : heightAt(p.lon, p.lat) + 0.3;
       return { key: `place-${p.name}`, pos: new THREE.Vector3(x, y, z), el: null };
     });
-    for (const e of points) {
+    // Labels are placed in priority order: the chosen monument, then the best-documented ones.
+    // When they'd overlap, the later ones are hidden until you zoom in.
+    const ranked = [...points].sort((a, b) => (b.id === selected ? 1 : 0) - (a.id === selected ? 1 : 0) || b.n_sources - a.n_sources);
+    for (const e of ranked) {
       const [x, z] = project(e.lng, e.lat);
-      list.push({ key: `m-${e.id}`, pos: new THREE.Vector3(x, heightAt(e.lng, e.lat) + 0.25, z), el: null });
+      list.push({ key: `m-${e.id}`, pos: new THREE.Vector3(x, heightAt(e.lng, e.lat) + 1.3, z), el: null });
     }
     if (pickedEntity) {
       const [x, z] = project(pickedEntity.lng, pickedEntity.lat);
-      list.push({ key: "popup", pos: new THREE.Vector3(x, heightAt(pickedEntity.lng, pickedEntity.lat) + 0.25, z), el: null });
+      list.push({ key: "popup", pos: new THREE.Vector3(x, heightAt(pickedEntity.lng, pickedEntity.lat) + 1.3, z), el: null });
     }
     return list;
     // heightAt changes identity when the terrain arrives
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [terrain, entities, pickedEntity]);
+  }, [terrain, entities, pickedEntity, selected]);
   pins.current = pinList;
   const pinRef = (key: string) => (el: HTMLElement | null) => {
     const p = pins.current.find((x) => x.key === key);
@@ -742,7 +851,10 @@ export default function GujaratMap3D({
             </p>
             <p className={`mt-1 font-display text-lg tracking-[0.3em] uppercase ${darkUi ? "text-[#e8c27a]" : "text-[#6b4a1c]"}`}>Gujarat</p>
             <p className={`mt-0.5 font-serif text-[12px] italic ${darkUi ? "text-[#c9a46a]/80" : "text-[#4a3a2a]"}`}>
-              Drag to turn · scroll to zoom · click a monument
+              Drag to turn and tilt · scroll to zoom · click a monument
+            </p>
+            <p className={`mt-0.5 hidden font-serif text-[12px] italic sm:block ${darkUi ? "text-[#c9a46a]/80" : "text-[#4a3a2a]"}`}>
+              Right-drag or W A S D to move · Q / E to turn
             </p>
           </div>
           <StyleSwitcher current={base} onChange={setBase} status={status} />
@@ -783,6 +895,14 @@ function StyleSwitcher({ current, onChange, status }: { current: MapBase; onChan
         aria-label="Map style"
         className="flex rounded-md border border-[#b48c5c]/70 bg-[#1f160e]/85 p-0.5 shadow-[0_6px_20px_rgb(0_0_0/0.45)] backdrop-blur"
       >
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event(RESET_EVENT))}
+          title="Back to the starting view (R)"
+          className="mr-0.5 rounded border-r border-[#b48c5c]/40 px-2.5 py-1.5 text-[13px] text-[#f3dfb8]/85 hover:bg-white/10"
+        >
+          Reset view
+        </button>
         {MAP_BASES.map((s) => (
           <button
             key={s.id}

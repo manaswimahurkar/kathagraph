@@ -9,6 +9,7 @@ import type {
   ClaimStatusResponse,
   EntitiesResponse,
   EntityDetail,
+  EntityModel,
   Health,
   PrioritiesResponse,
   SearchResponse,
@@ -106,6 +107,27 @@ export function setClaimStatus(id: number, status: ClaimStatus): Promise<ClaimSt
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
+}
+
+/**
+ * POST /entities/{id}/models: add a 3D model to a monument, either a Sketchfab link
+ * (JSON { sketchfab_url }) or a .glb/.gltf file (multipart field "file").
+ */
+export function addModel(entityId: number, input: { sketchfabUrl: string; sketchfabUid: string } | { file: File }): Promise<EntityModel> {
+  if (USE_MOCK) {
+    return viaMock(() => mock.addModel(entityId, "file" in input ? { file: input.file } : { sketchfabUid: input.sketchfabUid }));
+  }
+  if ("file" in input) {
+    const form = new FormData();
+    form.append("file", input.file);
+    // false = no retry, and the longer 70 s timeout: 3D files can be large
+    return request(`/entities/${entityId}/models`, { method: "POST", body: form }, false);
+  }
+  return request(`/entities/${entityId}/models`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sketchfab_url: input.sketchfabUrl }),
+  });
 }
 
 export function getPriorities(): Promise<PrioritiesResponse> {
