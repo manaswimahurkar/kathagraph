@@ -7,6 +7,7 @@ import type {
   ClaimStatus,
   ClaimStatusResponse,
   Conflict,
+  EntityModel,
   EntitiesResponse,
   EntityDetail,
   EntitySource,
@@ -210,6 +211,7 @@ export async function getEntity(id: number): Promise<EntityDetail> {
     conflicts: conflictsFor(id),
     gaps: e.gaps,
     sources: SOURCES.filter((s) => s.entity_id === id).map(({ id, filename, type, tag }) => ({ id, filename, type, tag })),
+    models: ADDED_MODELS.get(id) ?? [],
   };
 }
 
@@ -296,6 +298,25 @@ function typeOf(name: string): SourceType {
   if (/\.pdf$/i.test(name)) return "pdf";
   if (/\.csv$/i.test(name)) return "csv";
   return "note";
+}
+
+// 3D models added in this demo session (kept in memory only).
+const ADDED_MODELS = new Map<number, EntityModel[]>();
+let nextModelId = 1;
+
+export async function addModel(entityId: number, input: { sketchfabUid: string } | { file: File }): Promise<EntityModel> {
+  await delay(600);
+  if (!ENTITIES.some((e) => e.id === entityId)) throw new MockHttpError(404, `No monument with id ${entityId}.`);
+  let model: EntityModel;
+  if ("file" in input) {
+    if (!/\.(glb|gltf)$/i.test(input.file.name)) throw new MockHttpError(400, "Only .glb or .gltf 3D files can be added.");
+    if (input.file.size > 50 * 1024 * 1024) throw new MockHttpError(413, "The 3D file is larger than 50 MB.");
+    model = { id: nextModelId++, provider: "file", url: URL.createObjectURL(input.file), title: input.file.name, author: "You (demo)" };
+  } else {
+    model = { id: nextModelId++, provider: "sketchfab", uid: input.sketchfabUid, title: "Sketchfab model", author: null };
+  }
+  ADDED_MODELS.set(entityId, [...(ADDED_MODELS.get(entityId) ?? []), model]);
+  return model;
 }
 
 export async function upload(files: File[]): Promise<UploadResponse> {

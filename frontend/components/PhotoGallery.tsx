@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSource, USE_MOCK } from "@/lib/api";
+import { originOf } from "@/lib/insights";
 import { tagLabel, type EntitySource } from "@/lib/types";
 
 interface Photo {
@@ -43,6 +44,8 @@ export default function PhotoGallery({ sources, citation }: { sources: EntitySou
 
   if (photos.length === 0) return null;
   const shown = items?.filter((p): p is Photo & { url: string } => !!p.url) ?? [];
+  const field = shown.filter((p) => originOf(p.source) === "field");
+  const web = shown.filter((p) => originOf(p.source) === "web");
   const noPreview = items?.filter((p) => !p.url) ?? [];
   // Nothing to show once loaded: keep the page tidy (the files are still listed under Sources).
   if (items && shown.length === 0) return null;
@@ -58,33 +61,26 @@ export default function PhotoGallery({ sources, citation }: { sources: EntitySou
           <div className="kg-skeleton aspect-[4/3]" />
         </div>
       ) : (
-        <ul className={`grid gap-2 ${shown.length === 1 ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3"}`}>
-          {shown.map((p, i) => (
-            <li key={p.source.id} className={i === 0 && shown.length > 2 ? "col-span-2 row-span-2" : ""}>
-              <figure className="group relative h-full overflow-hidden rounded-sm border border-line bg-sand">
-                <button type="button" onClick={() => setOpen(p)} className="block h-full w-full" aria-label={`Enlarge ${p.source.filename}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- files come from the archive's own storage */}
-                  <img
-                    src={p.url}
-                    alt={`${tagLabel(p.source.tag) ?? "Photo"}: ${p.source.filename}`}
-                    loading="lazy"
-                    onError={(e) => {
-                      // a broken link shouldn't leave a broken image: hide that tile
-                      const tile = e.currentTarget.closest("li");
-                      if (tile) tile.style.display = "none";
-                    }}
-                    className={`h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] ${
-                      shown.length === 1 ? "aspect-[16/9]" : "aspect-[4/3]"
-                    }`}
-                  />
-                </button>
-                <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2.5 pb-1.5 pt-6 text-[12px] text-white">
-                  [{citation.get(p.source.id) ?? "?"}] {tagLabel(p.source.tag) ?? p.source.filename}
-                </figcaption>
-              </figure>
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-5">
+          {field.length > 0 && (
+            <PhotoGroup
+              title={web.length ? "Our field photos" : null}
+              hint={web.length ? "Taken and uploaded by contributors." : null}
+              photos={field}
+              citation={citation}
+              onOpen={setOpen}
+            />
+          )}
+          {web.length > 0 && (
+            <PhotoGroup
+              title="Published photos"
+              hint="Imported from Wikimedia Commons, with each photographer's name and licence. They show the site, but don't count as our own documentation."
+              photos={web}
+              citation={citation}
+              onOpen={setOpen}
+            />
+          )}
+        </div>
       )}
       <p className="mt-1.5 text-[12px] text-dust">
         {noPreview.length > 0 && `${noPreview.length} more ${noPreview.length === 1 ? "photo has" : "photos have"} no preview yet. `}
@@ -109,10 +105,62 @@ export default function PhotoGallery({ sources, citation }: { sources: EntitySou
             </p>
           )}
           <p className="mt-2 text-center text-[13px] text-white/80">
-            {open.source.filename} · click anywhere or press Esc to close
+            {open.source.filename}
+            {(open.source.author || open.source.licence) &&
+              ` · ${[open.source.author && `by ${open.source.author}`, open.source.licence].filter(Boolean).join(", ")}`}
+            {" "}· click anywhere or press Esc to close
           </p>
         </div>
       )}
     </section>
+  );
+}
+
+function PhotoGroup({
+  title,
+  hint,
+  photos,
+  citation,
+  onOpen,
+}: {
+  title: string | null;
+  hint: string | null;
+  photos: (Photo & { url: string })[];
+  citation: Map<number, number>;
+  onOpen: (p: Photo) => void;
+}) {
+  return (
+    <div>
+      {title && <h3 className="text-[13px] tracking-wide text-ochre">{title}</h3>}
+      {hint && <p className="mb-2 text-[13px] text-dust">{hint}</p>}
+      <ul className={`grid gap-2 ${photos.length === 1 ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3"}`}>
+        {photos.map((p, i) => (
+          <li key={p.source.id} className={i === 0 && photos.length > 2 ? "col-span-2 row-span-2" : ""}>
+            <figure className="group relative h-full overflow-hidden rounded-sm border border-line bg-sand">
+              <button type="button" onClick={() => onOpen(p)} className="block h-full w-full" aria-label={`Enlarge ${p.source.filename}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- files come from the archive's own storage */}
+                <img
+                  src={p.url}
+                  alt={`${tagLabel(p.source.tag) ?? "Photo"}: ${p.source.filename}`}
+                  loading="lazy"
+                  onError={(e) => {
+                    // a broken link shouldn't leave a broken image: hide that tile
+                    const tile = e.currentTarget.closest("li");
+                    if (tile) tile.style.display = "none";
+                  }}
+                  className={`h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] ${
+                    photos.length === 1 ? "aspect-[16/9]" : "aspect-[4/3]"
+                  }`}
+                />
+              </button>
+              <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2.5 pb-1.5 pt-6 text-[12px] text-white">
+                [{citation.get(p.source.id) ?? "?"}] {tagLabel(p.source.tag) ?? p.source.filename}
+                {p.source.author && <span className="block text-[11px] text-white/75">by {p.source.author}{p.source.licence ? `, ${p.source.licence}` : ""}</span>}
+              </figcaption>
+            </figure>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

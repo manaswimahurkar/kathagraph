@@ -67,6 +67,10 @@ export interface EntitySummary {
   n_sources: number;
   n_conflicts: number;
   n_gaps: number;
+  /** Optional: temple | stepwell | fort | mosque | tomb | cave | lake | palace | museum | site. Guessed from the name if absent. */
+  category?: string | null;
+  /** Optional: "approximate" when the pin is the location of a larger complex the site belongs to. */
+  coord_precision?: "exact" | "approximate" | null;
 }
 export interface EntitiesResponse {
   entities: EntitySummary[];
@@ -118,6 +122,25 @@ export interface EntitySource {
   file_url?: string | null;
   /** AI description of a photo. Always label it as AI-written. */
   description?: string | null;
+  /** Optional: where it came from. "web" = imported from Wikipedia/Wikimedia Commons; "field" = uploaded by a contributor. */
+  origin?: "web" | "field" | null;
+  /** Optional, for imported material: credit line and licence, e.g. "Bernard Gagnon", "CC BY-SA 3.0". */
+  author?: string | null;
+  licence?: string | null;
+  /** Optional: the page it was imported from (Wikipedia article or Commons file page). */
+  source_url?: string | null;
+}
+
+/** A 3D model of the monument: a Sketchfab embed, or a .glb/.gltf file stored by the archive. */
+export interface EntityModel {
+  id: number;
+  provider: "sketchfab" | "file";
+  uid?: string | null; // Sketchfab model id (provider = sketchfab)
+  url?: string | null; // file URL (provider = file)
+  title: string;
+  author?: string | null;
+  author_url?: string | null;
+  licence?: string | null;
 }
 
 export interface EntityDetail {
@@ -131,6 +154,11 @@ export interface EntityDetail {
   conflicts: Conflict[];
   gaps: Gap[];
   sources: EntitySource[];
+  /** Optional (see EntitySummary). */
+  category?: string | null;
+  coord_precision?: "exact" | "approximate" | null;
+  /** Optional: 3D models stored for this monument. */
+  models?: EntityModel[];
 }
 
 /** GET /priorities — the archive as a to-do list for the next field visit. Already sorted: most work first. */

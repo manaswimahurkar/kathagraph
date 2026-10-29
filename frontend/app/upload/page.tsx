@@ -176,13 +176,19 @@ function UploadView() {
       </p>
 
       <div className="mt-6 rounded-sm border border-ochre/40 bg-ochre-soft/50 p-4">
-        <p className="font-medium text-ochre">Only upload material that is new</p>
+        <p className="font-medium text-ochre">Add what isn&apos;t already online</p>
         <p className="mt-1 text-[15px] leading-relaxed">
-          The archive is for evidence that isn&apos;t recorded anywhere else yet: your own photos, field notes, sketches, or
-          unpublished family and community documents. Please don&apos;t upload files that are already in this archive
-          (check the monument&apos;s Sources list) or that are already on the internet, such as photos from websites or
-          text from Wikipedia and books. Openly licensed images (for example from Wikimedia Commons) are fine when
-          their licence allows it and the author is credited.
+          What&apos;s published on the web (Wikipedia articles and Wikimedia Commons photos) is imported into the archive
+          automatically, so there&apos;s no need to upload it. What we need from you is what the internet doesn&apos;t have:
+        </p>
+        <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-[15px]">
+          <li>photos you took yourself, especially of items a monument is still missing</li>
+          <li>field notes, measurements or sketches you made on site</li>
+          <li>local knowledge, stories and unpublished family or community documents</li>
+        </ul>
+        <p className="mt-1.5 text-[15px] leading-relaxed">
+          Anything new you add is marked “New: not found online” on the monument&apos;s page. Please don&apos;t upload files
+          already in this archive (check the monument&apos;s Sources list) or copied from websites and books.
         </p>
         <label className="mt-3 flex cursor-pointer items-start gap-2.5 text-[15px]">
           <input
@@ -192,7 +198,7 @@ function UploadView() {
             className="mt-1 size-4 shrink-0 accent-[var(--color-water)]"
           />
           <span>
-            I confirm these files are new, or openly licensed and credited, and that I have the right to share them.
+            I confirm these files are my own or not yet online, and that I have the right to share them.
           </span>
         </label>
       </div>

@@ -8,7 +8,8 @@ import PhotoGallery from "@/components/PhotoGallery";
 import SiteWalkthrough from "@/components/SiteWalkthrough";
 import { EmptyState, ErrorState, Skeleton } from "@/components/States";
 import { ApiError, getEntity, setClaimStatus } from "@/lib/api";
-import { comparisonRows, corroborated, fieldOnly, MONUMENT_CHECKLIST, summarise } from "@/lib/insights";
+import { comparisonRows, corroborated, fieldOnly, MONUMENT_CHECKLIST, novelty, originOf, summarise, type Novelty } from "@/lib/insights";
+import { CATEGORY_LABEL, categoryOf } from "@/lib/structures";
 import { modelsFor } from "@/lib/models";
 import { fieldLabel, tagLabel, type Claim, type ClaimStatus, type EntityDetail } from "@/lib/types";
 
@@ -86,13 +87,17 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
   const citation = new Map(entity.sources.map((s, i) => [s.id, i + 1]));
   const disputed = new Set(entity.conflicts.map((c) => c.field));
 
-  const models = modelsFor(entity.name, entity.aliases.map((a) => a.alias));
+  const curated = modelsFor(entity.name, entity.aliases.map((a) => a.alias));
+  const fresh = novelty(entity);
+  const category = CATEGORY_LABEL[categoryOf(entity.name, entity.category)];
 
   return (
     <article className="mt-5">
-      <Model3D name={entity.name} models={models} />
+      <Model3D entityId={entity.id} name={entity.name} curated={curated} fromArchive={entity.models ?? []} />
       <header className="pb-8">
-        <p className="text-[13px] tracking-wide text-ochre">Record no. {String(entity.id).padStart(3, "0")}</p>
+        <p className="text-[13px] tracking-wide text-ochre">
+          {category} · Record no. {String(entity.id).padStart(3, "0")}
+        </p>
         <h1 className="mt-1 font-display text-[2.6rem] leading-[1.05] sm:text-6xl">{entity.name}</h1>
         {entity.aliases.length > 0 && (
           <p className="mt-2 text-[17px] text-dust">
@@ -110,6 +115,7 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
         {entity.lat != null && entity.lng != null && (
           <p className="mt-1 text-sm text-dust">
             {entity.lat.toFixed(4)}° N, {entity.lng.toFixed(4)}° E
+            {entity.coord_precision === "approximate" && " · approximate: shown at the location of the larger site it belongs to"}
           </p>
         )}
 
@@ -128,14 +134,15 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
       <PhotoGallery sources={entity.sources} citation={citation} />
       <AtAGlance entity={entity} />
       <FieldOnly entity={entity} citation={citation} />
-      <KnownFacts claims={entity.claims} citation={citation} disputed={disputed} onChanged={onChanged} />
+      <KnownFacts claims={entity.claims} citation={citation} disputed={disputed} fresh={fresh} onChanged={onChanged} />
       <Disagreements entity={entity} citation={citation} />
       <MissingDocs entity={entity} />
       {entity.lat != null && entity.lng != null && (
         <Section
           id="visit"
-          title="Walk through the site"
-          intro="Explore the monument in Google Street View or from above, as it looks today."
+          title="See it today"
+          intro="Look around the site in Google Street View, or see it from above, as it is now."
+          action="Drag inside the view to look around. If Street View is black, Google has no photos at that exact spot; use “From above”."
         >
           <SiteWalkthrough name={entity.name} lat={entity.lat} lng={entity.lng} />
         </Section>
@@ -159,14 +166,41 @@ function JumpLink({ href, tone, children }: { href: string; tone?: "ochre"; chil
   );
 }
 
-function Section({ id, title, intro, children }: { id: string; title: string; intro: string; children: React.ReactNode }) {
+/**
+ * A part of the record. Every section explains itself in plain words: what it shows ("intro")
+ * and, where useful, what the reader can do with it ("action").
+ */
+function Section({
+  id,
+  title,
+  intro,
+  action,
+  children,
+}: {
+  id: string;
+  title: string;
+  intro: string;
+  action?: string;
+  children: React.ReactNode;
+}) {
   return (
     <section id={id} aria-labelledby={`${id}-h`} className="scroll-mt-28 pb-10">
       <div className="kg-frieze mb-7" aria-hidden="true" />
       <h2 id={`${id}-h`} className="font-display text-3xl">
         {title}
       </h2>
-      <p className="mt-1 max-w-2xl text-[15px] text-dust">{intro}</p>
+      <div className="mt-2 max-w-2xl rounded-md border border-line bg-sand/50 px-3.5 py-2.5 text-[15px] leading-relaxed">
+        <p>
+          <span className="mr-1.5 font-medium text-ochre">What this is:</span>
+          {intro}
+        </p>
+        {action && (
+          <p className="mt-1">
+            <span className="mr-1.5 font-medium text-water">What you can do:</span>
+            {action}
+          </p>
+        )}
+      </div>
       <div className="mt-5">{children}</div>
     </section>
   );
@@ -203,18 +237,21 @@ function KnownFacts({
   claims,
   citation,
   disputed,
+  fresh,
   onChanged,
 }: {
   claims: Claim[];
   citation: Map<number, number>;
   disputed: Set<string>;
+  fresh: Map<number, Novelty>;
   onChanged: () => void;
 }) {
   return (
     <Section
       id="facts"
-      title="Known facts"
-      intro="Each fact is one claim from one source. The AI suggests; a researcher verifies or rejects."
+      title="What we know"
+      intro="Every single fact about this place, each with the source it came from. An AI reads the sources and suggests the facts, so each one starts as “unverified” until a person checks it. “From the web” means it came from Wikipedia; “New” means a contributor added it and we didn't find it online."
+      action="If you know a fact is right or wrong, press Verify or Reject. Click a number like [2] to see its source."
     >
       {claims.length === 0 ? (
         <EmptyState title="No facts extracted yet">
@@ -226,7 +263,14 @@ function KnownFacts({
       ) : (
         <ul className="divide-y divide-line rounded-md border border-line bg-paper">
           {claims.map((c) => (
-            <FactRow key={c.id} claim={c} n={citation.get(c.source.id)} disputed={disputed.has(c.field)} onChanged={onChanged} />
+            <FactRow
+              key={c.id}
+              claim={c}
+              n={citation.get(c.source.id)}
+              disputed={disputed.has(c.field)}
+              novelty={fresh.get(c.id)}
+              onChanged={onChanged}
+            />
           ))}
         </ul>
       )}
@@ -234,7 +278,25 @@ function KnownFacts({
   );
 }
 
-function FactRow({ claim, n, disputed, onChanged }: { claim: Claim; n?: number; disputed: boolean; onChanged: () => void }) {
+const NOVELTY: Record<Novelty, { label: string; className: string; title: string }> = {
+  web: { label: "From the web", className: "bg-sand text-dust", title: "Imported from Wikipedia or another published web source" },
+  new: { label: "New: not found online", className: "bg-ochre text-paper", title: "Added by a contributor; no web source we imported says this" },
+  "also-online": { label: "Also online", className: "bg-water-soft text-water", title: "A contributor added this, and the web says the same" },
+};
+
+function FactRow({
+  claim,
+  n,
+  disputed,
+  novelty,
+  onChanged,
+}: {
+  claim: Claim;
+  n?: number;
+  disputed: boolean;
+  novelty?: Novelty;
+  onChanged: () => void;
+}) {
   const [status, setStatus] = useState<ClaimStatus>(claim.status);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -276,6 +338,11 @@ function FactRow({ claim, n, disputed, onChanged }: { claim: Claim; n?: number; 
 
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-dust">
           <span className={`rounded-full px-2 py-0.5 font-medium ${STATUS_STYLE[status]}`}>{status}</span>
+          {novelty && (
+            <span title={NOVELTY[novelty].title} className={`rounded-full px-2 py-0.5 font-medium ${NOVELTY[novelty].className}`}>
+              {NOVELTY[novelty].label}
+            </span>
+          )}
           <span>
             {METHOD_LABEL[claim.method]}
             {claim.confidence != null && `, ${Math.round(claim.confidence * 100)}% confidence`}
@@ -339,8 +406,9 @@ function Disagreements({ entity, citation }: { entity: EntityDetail; citation: M
   return (
     <Section
       id="disagreements"
-      title="Sources disagree"
-      intro="Where sources give different answers, each one is compared side by side. KathaGraph doesn't pick a winner: verify or reject the facts above to settle it."
+      title="Where sources disagree"
+      intro="Sometimes two sources give different answers about the same thing, for example two different years of construction. We put them side by side instead of guessing which one is right."
+      action="Someone at the site can often settle it, for example by photographing the inscription. You can also Verify or Reject the facts above."
     >
       {entity.conflicts.length === 0 ? (
         <EmptyState title="No disagreements between sources">
@@ -446,8 +514,9 @@ function MissingDocs({ entity }: { entity: EntityDetail }) {
   return (
     <Section
       id="missing"
-      title="Missing documentation"
-      intro="What a complete record of a monument should include, and what this one still lacks. Take the unticked items on the next field visit."
+      title="What's still missing"
+      intro="A checklist of what a complete record of a monument should have. A tick means the archive already has it; an empty box is a gap. Photos that exist somewhere online but not in our archive still count as missing."
+      action="If you can photograph or record a missing item, add it with the button at the end of this page. The Field visits page lists these gaps for every monument."
     >
       <p className="mb-3 text-[15px]">
         <span className="font-display text-2xl">
@@ -501,7 +570,11 @@ function AtAGlance({ entity }: { entity: EntityDetail }) {
   const agree = corroborated(entity);
   const pct = s.facts ? Math.round((s.verified / s.facts) * 100) : 0;
   return (
-    <Section id="glance" title="At a glance" intro="What the archive can say about this monument as a whole, worked out from its facts and files.">
+    <Section
+      id="glance"
+      title="At a glance"
+      intro="A quick summary: how many facts a person has checked, how many details are disputed, what kind of evidence we have, and which details several sources agree on."
+    >
       <dl className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-sm border border-line bg-paper p-4">
           <dt className="text-[13px] text-dust">Checked by a researcher</dt>
@@ -559,8 +632,8 @@ function FieldOnly({ entity, citation }: { entity: EntityDetail; citation: Map<n
   return (
     <Section
       id="lesser-known"
-      title="Found only in our field records"
-      intro="These details come only from the team's own field notes and photos, not from any scanned report or published document. Some may be lesser known; none should be repeated as fact until verified."
+      title="New details from the field"
+      intro="Things contributors recorded on site that don't appear in the published sources we checked. This is new knowledge the archive adds, but each detail still needs checking before anyone repeats it as fact."
     >
       <ul className="grid gap-3 sm:grid-cols-2">
         {items.map(({ claim, flagged }) => (
@@ -587,7 +660,8 @@ function Contribute({ entity }: { entity: EntityDetail }) {
     <Section
       id="contribute"
       title="Have something new about this monument?"
-      intro="The archive grows from material that doesn't exist anywhere else yet."
+      intro="We already import what's published online (Wikipedia and Wikimedia Commons). The archive grows from what isn't online yet: your own photos, notes and local knowledge."
+      action="Upload new material, especially anything from the “What's still missing” list."
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-sm border border-water/30 bg-water-soft/50 p-4">
@@ -602,7 +676,7 @@ function Contribute({ entity }: { entity: EntityDetail }) {
           <p className="font-medium text-rust">Please don&apos;t upload</p>
           <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[15px]">
             <li>anything already listed in this record&apos;s sources</li>
-            <li>photos or text copied from websites, Wikipedia or books</li>
+            <li>photos or text copied from websites or books (published web material is imported automatically)</li>
             <li>anything you don&apos;t have the right to share</li>
           </ul>
         </div>
@@ -624,7 +698,11 @@ const TYPE_LABEL = { photo: "Photo", pdf: "PDF scan", note: "Field note", csv: "
 
 function SourceList({ entity }: { entity: EntityDetail }) {
   return (
-    <Section id="sources" title="Sources" intro="Every file linked to this monument. Numbers match the citations above.">
+    <Section
+      id="sources"
+      title="Where this comes from"
+      intro="Every file and web page behind this record. The numbers like [1] next to each fact point to this list, so anything on the page can be traced back."
+    >
       {entity.sources.length === 0 ? (
         <EmptyState title="No files linked yet" />
       ) : (
@@ -636,8 +714,22 @@ function SourceList({ entity }: { entity: EntityDetail }) {
               className="flex scroll-mt-28 flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3 target:bg-ochre-soft/60"
             >
               <span className="w-8 shrink-0 font-serif text-dust">[{i + 1}]</span>
-              <span className="min-w-0 flex-1 break-all text-[15px]">{s.filename}</span>
+              <span className="min-w-0 flex-1 break-all text-[15px]">
+                {s.source_url ? (
+                  <a href={s.source_url} target="_blank" rel="noreferrer" className="text-water underline underline-offset-2">
+                    {s.filename}
+                  </a>
+                ) : (
+                  s.filename
+                )}
+                {(s.author || s.licence) && (
+                  <span className="block text-[12px] text-dust">
+                    {[s.author && `by ${s.author}`, s.licence].filter(Boolean).join(", ")}
+                  </span>
+                )}
+              </span>
               <span className="text-[13px] text-dust">
+                {originOf(s) === "web" ? "From the web · " : "Contributed · "}
                 {TYPE_LABEL[s.type] ?? s.type}
                 {tagLabel(s.tag) && `, ${tagLabel(s.tag)?.toLowerCase()}`}
               </span>

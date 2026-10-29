@@ -17,6 +17,8 @@ import { usePrefs, type MapBase } from "@/lib/prefs";
 import { buildTerrain, type ElevationSource, type Terrain } from "@/lib/terrain";
 import { fieldLabel, type EntityDetail, type EntitySummary } from "@/lib/types";
 import { CountChips } from "./CountChips";
+import { Structure } from "./Structures";
+import { categoryOf } from "@/lib/structures";
 
 export type MapView =
   | { kind: "home" }
@@ -251,7 +253,7 @@ function Table({ style }: { style: MapStyle }) {
   );
 }
 
-/** A beam of light and a pulsing ring over each monument. */
+/** A small 3D model of each monument on its spot, with a beam of light and a pulsing ring. */
 function Markers({
   points,
   heightAt,
@@ -290,17 +292,16 @@ function Markers({
               onPick(e.id);
             }}
           >
-            <mesh position={[0, on ? 2.4 : 1.6, 0]}>
-              <cylinderGeometry args={[0.04, on ? 0.18 : 0.13, on ? 4.8 : 3.2, 12, 1, true]} />
+            <group scale={on ? 1.7 : 1.25} rotation-y={(e.id * 1.7) % Math.PI}>
+              <Structure kind={categoryOf(e.name, e.category)} highlight={on} />
+            </group>
+            <mesh position={[0, on ? 3.4 : 2.6, 0]}>
+              <cylinderGeometry args={[0.03, on ? 0.12 : 0.08, on ? 3.6 : 2.6, 12, 1, true]} />
               <meshBasicMaterial color={color} transparent opacity={on ? 0.85 : 0.6} blending={THREE.AdditiveBlending} depthWrite={false} />
             </mesh>
             <mesh rotation-x={-Math.PI / 2} position={[0, 0.03, 0]} ref={(m) => void (m && (rings.current[i] = m))}>
-              <ringGeometry args={[0.18, 0.24, 32]} />
+              <ringGeometry args={[0.62, 0.7, 40]} />
               <meshBasicMaterial color={color} transparent opacity={0.7} depthWrite={false} />
-            </mesh>
-            <mesh position={[0, 0.06, 0]}>
-              <sphereGeometry args={[on ? 0.16 : 0.11, 16, 12]} />
-              <meshBasicMaterial color={color} />
             </mesh>
           </group>
         );
@@ -600,13 +601,13 @@ function Projector({ pins }: { pins: React.RefObject<Pin[]> }) {
       const visible = v.z < 1 && Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2;
       const x = (v.x * 0.5 + 0.5) * size.width;
       let y = (-v.y * 0.5 + 0.5) * size.height;
-      // Monument labels must never cover each other: push a clashing one below the last.
-      if (p.key.startsWith("m-")) {
+      // Monument labels must never cover each other: a clashing one (lower priority) is hidden
+      // until zooming in makes room for it. The monument's 3D model stays visible.
+      let clash = false;
+      if (p.key.startsWith("m-") && visible) {
         const w = p.el.offsetWidth;
-        for (const q of placed) {
-          if (Math.abs(q.x - x) < (q.w + w) / 2 + 4 && Math.abs(q.y - y) < 30) y = q.y + 32;
-        }
-        placed.push({ x, y, w });
+        clash = placed.some((q) => Math.abs(q.x - x) < (q.w + w) / 2 + 4 && Math.abs(q.y - y) < 28);
+        if (!clash) placed.push({ x, y, w });
       }
       let px = x;
       if (p.key === "popup") {
@@ -618,7 +619,9 @@ function Projector({ pins }: { pins: React.RefObject<Pin[]> }) {
         y = y - 44 - h < 110 ? y + h + 24 : y - 44;
       }
       p.el.style.transform = `translate(-50%, -100%) translate(${px}px, ${y}px)`;
-      p.el.style.opacity = visible ? "" : "0";
+      const show = visible && !clash;
+      p.el.style.opacity = show ? "" : "0";
+      p.el.style.pointerEvents = show ? "" : "none";
     }
   });
   return null;
@@ -721,18 +724,21 @@ export default function GujaratMap3D({
       const y = p.kind === "town" ? heightAt(p.lon, p.lat) + 0.05 : p.kind === "sea" ? -0.85 : heightAt(p.lon, p.lat) + 0.3;
       return { key: `place-${p.name}`, pos: new THREE.Vector3(x, y, z), el: null };
     });
-    for (const e of points) {
+    // Labels are placed in priority order: the chosen monument, then the best-documented ones.
+    // When they'd overlap, the later ones are hidden until you zoom in.
+    const ranked = [...points].sort((a, b) => (b.id === selected ? 1 : 0) - (a.id === selected ? 1 : 0) || b.n_sources - a.n_sources);
+    for (const e of ranked) {
       const [x, z] = project(e.lng, e.lat);
-      list.push({ key: `m-${e.id}`, pos: new THREE.Vector3(x, heightAt(e.lng, e.lat) + 0.25, z), el: null });
+      list.push({ key: `m-${e.id}`, pos: new THREE.Vector3(x, heightAt(e.lng, e.lat) + 1.3, z), el: null });
     }
     if (pickedEntity) {
       const [x, z] = project(pickedEntity.lng, pickedEntity.lat);
-      list.push({ key: "popup", pos: new THREE.Vector3(x, heightAt(pickedEntity.lng, pickedEntity.lat) + 0.25, z), el: null });
+      list.push({ key: "popup", pos: new THREE.Vector3(x, heightAt(pickedEntity.lng, pickedEntity.lat) + 1.3, z), el: null });
     }
     return list;
     // heightAt changes identity when the terrain arrives
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [terrain, entities, pickedEntity]);
+  }, [terrain, entities, pickedEntity, selected]);
   pins.current = pinList;
   const pinRef = (key: string) => (el: HTMLElement | null) => {
     const p = pins.current.find((x) => x.key === key);
