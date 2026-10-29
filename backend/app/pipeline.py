@@ -5,7 +5,9 @@ Stage 2: text extraction + OCR (Hindi + English) -> chunks.
 Stage 3: embeddings for meaning-based search (Gemini).
 Stage 4: AI photo description, fact extraction (claims), linking to monuments.
 """
+import gc
 import logging
+import threading
 
 import httpx
 from psycopg.types.json import Jsonb
@@ -56,7 +58,23 @@ def _save_claims(source_id: int, found: list[dict], chunks: list[tuple[int, str]
     return entity_ids
 
 
+# One file at a time. Large photos need a lot of memory to decode, OCR and describe;
+# several at once can exceed a small server's RAM (Render free tier: 512 MB) and crash it.
+# Uploads still return immediately; files simply wait their turn as "pending".
+# Scaling path: replace this lock with a job queue and separate worker processes.
+_one_at_a_time = threading.Lock()
+
+
 def process_source(source_id: int, data: bytes, kind: str):
+    with _one_at_a_time:
+        try:
+            _process(source_id, data, kind)
+        finally:
+            del data
+            gc.collect()
+
+
+def _process(source_id: int, data: bytes, kind: str):
     _set_status(source_id, "processing")
     try:
         warnings: list[str] = []

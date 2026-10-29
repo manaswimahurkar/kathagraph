@@ -125,7 +125,10 @@ def generate_json(parts: list[dict], schema: dict, temperature: float = 0.1) -> 
 
 def image_part(data: bytes, max_side: int = 1024) -> dict:
     """Downscale a photo and package it for Gemini."""
-    img = ImageOps.exif_transpose(Image.open(BytesIO(data))).convert("RGB")
+    img = Image.open(BytesIO(data))
+    if img.format == "JPEG":
+        img.draft("RGB", (max_side, max_side))  # decode small: saves memory on big photos
+    img = ImageOps.exif_transpose(img).convert("RGB")
     img.thumbnail((max_side, max_side))
     buf = BytesIO()
     img.save(buf, "JPEG", quality=85)

@@ -67,6 +67,10 @@ def _ocr_image(img: Image.Image, strict: bool) -> str:
     except ImportError as e:
         raise OcrUnavailable("pytesseract is not installed") from e
 
+    # For JPEGs, decode at reduced size straight away: a 13-megapixel photo otherwise
+    # needs ~40 MB of memory before it is even shrunk.
+    if img.format == "JPEG":
+        img.draft("RGB", (MAX_OCR_SIDE, MAX_OCR_SIDE))
     img = ImageOps.exif_transpose(img).convert("RGB")
     if max(img.size) > MAX_OCR_SIDE:
         img.thumbnail((MAX_OCR_SIDE, MAX_OCR_SIDE))
