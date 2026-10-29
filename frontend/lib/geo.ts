@@ -20,3 +20,8 @@ const COS_LAT = Math.cos((GEO_CENTRE.lat * Math.PI) / 180);
 export function project(lon: number, lat: number): [number, number] {
   return [(lon - GEO_CENTRE.lon) * UNITS_PER_DEG * COS_LAT, -(lat - GEO_CENTRE.lat) * UNITS_PER_DEG];
 }
+
+/** The inverse of project: map x/z back to longitude/latitude. */
+export function unproject(x: number, z: number): [number, number] {
+  return [GEO_CENTRE.lon + x / (UNITS_PER_DEG * COS_LAT), GEO_CENTRE.lat - z / UNITS_PER_DEG];
+}
