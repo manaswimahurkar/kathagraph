@@ -80,3 +80,15 @@ def test_same_place_in_hindi_and_english_is_not_a_conflict():
 def test_different_people_in_two_scripts_still_conflict():
     found = conflicts([claim(1, "builder", "Udayamati", SRC_A), claim(2, "builder", "भीम प्रथम", SRC_B)])
     assert len(found) == 1
+
+
+def test_field_visit_todo_lists_gaps_then_disagreements():
+    from app.entities import build_todo
+    detail = {
+        "gaps": [{"required_item": "interior_photo", "label": "Interior / structural photograph"}],
+        "conflicts": [{"field": "built_date", "claims": [{"value": "1498"}, {"value": "1499"}, {"value": "1498"}]}],
+    }
+    todo = build_todo(detail)
+    assert todo[0] == {"kind": "document", "item": "interior_photo", "text": "Interior / structural photograph"}
+    assert todo[1]["kind"] == "verify"
+    assert todo[1]["text"] == "Check the date of construction on site: sources say 1498 / 1499"

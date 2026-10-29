@@ -82,6 +82,54 @@ def get_entity(entity_id: int):
     return d
 
 
+FIELD_LABELS = {
+    "built_date": "date of construction", "builder": "builder / patron", "dynasty": "dynasty",
+    "location": "location", "architectural_style": "architectural style", "material": "material",
+    "purpose": "purpose", "inscription": "inscription",
+}
+
+
+def build_todo(detail: dict) -> list[dict]:
+    """What a fellow should do at this monument on the next field visit:
+    document every missing checklist item, and check on site every disagreement."""
+    todo = [{"kind": "document", "item": g["required_item"], "text": g["label"]} for g in detail["gaps"]]
+    for c in detail["conflicts"]:
+        values = list(dict.fromkeys(k["value"] for k in c["claims"]))
+        label = FIELD_LABELS.get(c["field"], c["field"].replace("_", " "))
+        todo.append({
+            "kind": "verify", "item": c["field"],
+            "text": f"Check the {label} on site: sources say " + " / ".join(values),
+        })
+    return todo
+
+
+@router.get("/priorities")
+def priorities(limit: int = 100):
+    """The archive as a to-do list: monuments ranked by how much fieldwork they still need
+    (missing documentation first, then unresolved disagreements, then fewest sources)."""
+    limit = max(1, min(limit, 200))
+    with get_conn() as conn:
+        ids = conn.execute("select id from entities where type = 'monument' order by id").fetchall()
+        rows = []
+        for r in ids:
+            d = _entity_detail(conn, r["id"])
+            todo = build_todo(d)
+            rows.append({
+                "id": d["id"], "name": d["name"], "lat": d["lat"], "lng": d["lng"],
+                "n_sources": len(d["sources"]), "n_gaps": len(d["gaps"]), "n_conflicts": len(d["conflicts"]),
+                "todo": todo,
+            })
+    rows.sort(key=lambda x: (-x["n_gaps"], -x["n_conflicts"], x["n_sources"], x["name"]))
+    return {
+        "monuments": rows[:limit],
+        "totals": {
+            "monuments": len(rows),
+            "missing_items": sum(x["n_gaps"] for x in rows),
+            "disagreements": sum(x["n_conflicts"] for x in rows),
+        },
+    }
+
+
 class EntityIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     type: str = "monument"
