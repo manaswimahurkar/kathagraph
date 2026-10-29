@@ -11,11 +11,14 @@ import type {
   EntityDetail,
   EntitySource,
   Gap,
+  PrioritiesResponse,
+  PriorityTodo,
   SearchResponse,
   SourceDetail,
   SourceType,
   UploadResponse,
 } from "./types";
+import { fieldLabel } from "./types";
 
 /** Thrown by mock endpoints; lib/api.ts turns it into the same ApiError the real API gives. */
 export class MockHttpError extends Error {
@@ -207,6 +210,37 @@ export async function getEntity(id: number): Promise<EntityDetail> {
     conflicts: conflictsFor(id),
     gaps: e.gaps,
     sources: SOURCES.filter((s) => s.entity_id === id).map(({ id, filename, type, tag }) => ({ id, filename, type, tag })),
+  };
+}
+
+/** Built from the demo records: missing items to document, and disagreements to check on site. */
+export async function getPriorities(): Promise<PrioritiesResponse> {
+  await delay();
+  const monuments = ENTITIES.map((e) => {
+    const conflicts = conflictsFor(e.id);
+    const todo: PriorityTodo[] = [
+      ...e.gaps.map((g) => ({ kind: "document" as const, item: g.required_item, text: g.label })),
+      ...conflicts.map((c) => ({
+        kind: "verify" as const,
+        item: c.field,
+        text: `Check the ${fieldLabel(c.field).toLowerCase()} on site: sources say ${[...new Set(c.claims.map((x) => x.value))].join(" / ")}`,
+      })),
+    ];
+    return {
+      id: e.id, name: e.name, lat: e.lat, lng: e.lng,
+      n_sources: SOURCES.filter((s) => s.entity_id === e.id).length,
+      n_gaps: e.gaps.length,
+      n_conflicts: conflicts.length,
+      todo,
+    };
+  }).sort((a, b) => b.todo.length - a.todo.length);
+  return {
+    totals: {
+      monuments: monuments.length,
+      missing_items: monuments.reduce((n, m) => n + m.n_gaps, 0),
+      disagreements: monuments.reduce((n, m) => n + m.n_conflicts, 0),
+    },
+    monuments,
   };
 }
 

@@ -10,6 +10,7 @@ import type {
   EntitiesResponse,
   EntityDetail,
   Health,
+  PrioritiesResponse,
   SearchResponse,
   SourceDetail,
   UploadResponse,
@@ -105,6 +106,10 @@ export function setClaimStatus(id: number, status: ClaimStatus): Promise<ClaimSt
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
+}
+
+export function getPriorities(): Promise<PrioritiesResponse> {
+  return USE_MOCK ? viaMock(() => mock.getPriorities()) : request("/priorities");
 }
 
 export function getSource(id: number): Promise<SourceDetail> {
