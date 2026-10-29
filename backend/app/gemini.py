@@ -66,7 +66,8 @@ FALLBACK_STATUS = {400, 404, 429, 500, 502, 503, 504, None}
 
 def _models() -> list[str]:
     """Models to try in order; later ones are used when earlier ones are busy or refuse the request."""
-    raw = os.getenv("GEMINI_MODELS", "gemini-flash-latest,gemini-2.5-flash,gemini-flash-lite-latest")
+    # Lite first: fast and plenty for extraction. Override with the GEMINI_MODELS setting.
+    raw = os.getenv("GEMINI_MODELS", "gemini-flash-lite-latest,gemini-flash-latest")
     return [m.strip() for m in raw.split(",") if m.strip()]
 
 

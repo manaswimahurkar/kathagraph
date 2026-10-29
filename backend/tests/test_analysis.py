@@ -65,3 +65,18 @@ def test_known_equivalent_dynasty_names_are_not_a_conflict():
 def test_different_dynasties_are_still_a_conflict():
     found = conflicts([claim(1, "dynasty", "Solanki", SRC_A), claim(2, "dynasty", "Vaghela", SRC_B)])
     assert len(found) == 1
+
+
+def test_same_name_in_hindi_and_english_is_not_a_conflict():
+    found = conflicts([claim(1, "builder", "Rudabai", SRC_A), claim(2, "builder", "रुडाबाई", SRC_B)])
+    assert found == []
+
+
+def test_same_place_in_hindi_and_english_is_not_a_conflict():
+    found = conflicts([claim(1, "location", "Adalaj, Gandhinagar", SRC_A), claim(2, "location", "अडालज, गांधीनगर", SRC_B)])
+    assert found == []
+
+
+def test_different_people_in_two_scripts_still_conflict():
+    found = conflicts([claim(1, "builder", "Udayamati", SRC_A), claim(2, "builder", "भीम प्रथम", SRC_B)])
+    assert len(found) == 1

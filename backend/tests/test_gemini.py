@@ -19,6 +19,7 @@ OK = FakeResponse(200, {"candidates": [{"content": {"parts": [{"text": '{"tag": 
 
 @pytest.fixture(autouse=True)
 def setup(monkeypatch):
+    monkeypatch.delenv("GEMINI_MODELS", raising=False)
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(gemini.time, "sleep", lambda s: None)
     monkeypatch.setattr(gemini, "_thinking_off_supported", True)
@@ -44,18 +45,18 @@ def test_model_rejecting_thinking_setting_is_retried_without_it(monkeypatch):
 
     result, calls = run(monkeypatch, respond)
     assert result == {"tag": "other", "description": "x"}
-    assert calls == [("gemini-flash-latest", True), ("gemini-flash-latest", False)]
+    assert calls == [("gemini-flash-lite-latest", True), ("gemini-flash-lite-latest", False)]
 
 
 def test_overloaded_model_falls_back_to_the_next(monkeypatch):
     def respond(url, body):
-        if "gemini-flash-latest" in url:
+        if "gemini-flash-lite-latest" in url:
             return FakeResponse(503, {"error": {"message": "high demand"}})
         return OK
 
     result, calls = run(monkeypatch, respond)
     assert result["tag"] == "other"
-    assert calls[-1][0] == "gemini-2.5-flash"
+    assert calls[-1][0] == "gemini-flash-latest"
 
 
 def test_every_model_refusing_raises_a_clear_error(monkeypatch):
