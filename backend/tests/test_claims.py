@@ -26,3 +26,18 @@ def test_low_model_confidence_is_kept():
 
 def test_empty_quote_counts_as_unverified():
     assert calibrate(0.95, "", SOURCE) == 0.5
+
+
+def test_photo_description_reports_whether_to_run_ocr(monkeypatch):
+    from app import claims, gemini
+    monkeypatch.setattr(gemini, "image_part", lambda data: {})
+    monkeypatch.setattr(gemini, "generate_json", lambda parts, schema: {"tag": "exterior_photo", "description": "A stepwell.", "has_text": False})
+    assert claims.describe_photo(b"x") == {"tag": "exterior_photo", "description": "A stepwell.", "has_text": False}
+
+
+def test_photo_description_runs_ocr_when_unsure(monkeypatch):
+    from app import claims, gemini
+    monkeypatch.setattr(gemini, "image_part", lambda data: {})
+    monkeypatch.setattr(gemini, "generate_json", lambda parts, schema: {"tag": "nonsense", "description": "?"})
+    info = claims.describe_photo(b"x")
+    assert info["tag"] == "other" and info["has_text"] is True

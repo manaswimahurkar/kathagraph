@@ -80,14 +80,16 @@ PHOTO_SCHEMA = {
     "properties": {
         "tag": {"type": "STRING", "enum": PHOTO_TAGS},
         "description": {"type": "STRING"},
+        "has_text": {"type": "BOOLEAN"},
     },
-    "required": ["tag", "description"],
+    "required": ["tag", "description", "has_text"],
 }
 
 PHOTO_PROMPT = """This photo comes from a field archive of Indian architectural heritage.
 1. tag: exterior_photo (outside view of a structure), interior_photo (inside a structure: corridors, wells, chambers),
    inscription (a carved or painted inscription or text panel), carving_detail (close-up of carvings or motifs), or other.
 2. description: one or two plain, factual sentences on what is visible (structure, materials, carvings, any script).
+3. has_text: true only if the photo contains readable writing (an inscription, a sign, a document, printed or handwritten text).
 Do NOT guess the monument's name, date or history."""
 
 
@@ -140,7 +142,12 @@ def extract(text: str, filename: str) -> list[dict]:
 
 
 def describe_photo(data: bytes) -> dict:
-    """Return {tag, description} for a photo."""
+    """Return {tag, description, has_text} for a photo."""
     result = gemini.generate_json([{"text": PHOTO_PROMPT}, gemini.image_part(data)], PHOTO_SCHEMA)
     tag = result.get("tag") if result.get("tag") in PHOTO_TAGS else "other"
-    return {"tag": tag, "description": str(result.get("description", "")).strip()}
+    has_text = result.get("has_text")
+    return {
+        "tag": tag,
+        "description": str(result.get("description", "")).strip(),
+        "has_text": has_text if isinstance(has_text, bool) else True,  # unsure -> run OCR
+    }

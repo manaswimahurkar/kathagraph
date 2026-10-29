@@ -95,27 +95,32 @@ def _process(source_id: int, data: bytes, kind: str):
                     (Jsonb(meta["exif"]), meta["lat"], meta["lng"], meta["captured_at"], source_id),
                 )
 
-        # 2. Text (notes, PDFs, OCR)
-        extracted = text_extract.extract(kind, data)
+        # 2. AI photo description (makes photos searchable; tags interior/exterior/inscription,
+        #    and says whether the photo has writing worth OCR-ing)
+        tag, description, needs_ocr = None, None, True
+        if kind == "photo" and gemini.available():
+            try:
+                info = claims.describe_photo(data)
+                tag, description, needs_ocr = info["tag"], info["description"], info["has_text"]
+                with get_conn() as conn:
+                    conn.execute("update sources set tag = %s, description = %s where id = %s",
+                                 (tag, description, source_id))
+            except gemini.GeminiError as e:
+                warnings.append(f"Photo not described: {e}")
+
+        # 3. Text (notes, PDFs, OCR). OCR is the slowest step on a small server, so photos
+        #    with no writing in them (most monument photos) skip it.
+        if kind == "photo" and not needs_ocr:
+            extracted = text_extract.Extracted()
+        else:
+            extracted = text_extract.extract(kind, data)
         if extracted.warning:
             warnings.append(extracted.warning)
         pieces = [(page, piece, text_extract.detect_language(piece))
                   for page, text in extracted.pages for piece in text_extract.chunk(text)]
         source_text = "\n\n".join(text for _, text in extracted.pages)
-
-        # 3. AI photo description (makes photos searchable; tags interior/exterior/inscription)
-        tag = None
-        if kind == "photo" and gemini.available():
-            try:
-                info = claims.describe_photo(data)
-                tag = info["tag"]
-                with get_conn() as conn:
-                    conn.execute("update sources set tag = %s, description = %s where id = %s",
-                                 (tag, info["description"], source_id))
-                if info["description"]:
-                    pieces.append((None, f"[AI description of photo] {info['description']}", "en"))
-            except gemini.GeminiError as e:
-                warnings.append(f"Photo not described: {e}")
+        if description:
+            pieces.append((None, f"[AI description of photo] {description}", "en"))
 
         chunks: list[tuple[int, str]] = []
         with get_conn() as conn:
