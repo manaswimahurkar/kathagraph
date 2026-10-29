@@ -55,3 +55,13 @@ def test_rejected_claim_does_not_fill_a_gap():
     claims = [claim(1, "built_date", "1499", SRC_A, status="rejected")]
     missing = {g["required_item"] for g in gaps(CHECKLIST, claims, [], has_location=False)}
     assert "built_date" in missing
+
+
+def test_known_equivalent_dynasty_names_are_not_a_conflict():
+    found = conflicts([claim(1, "dynasty", "Chaulukya", SRC_A), claim(2, "dynasty", "Solanki dynasty", SRC_B)])
+    assert found == []
+
+
+def test_different_dynasties_are_still_a_conflict():
+    found = conflicts([claim(1, "dynasty", "Solanki", SRC_A), claim(2, "dynasty", "Vaghela", SRC_B)])
+    assert len(found) == 1

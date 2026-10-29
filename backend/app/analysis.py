@@ -4,6 +4,16 @@ from difflib import SequenceMatcher
 
 from .claims import SINGLE_VALUED
 
+# Different names for the same thing, so they are not reported as a disagreement.
+# Kept short and explicit on purpose: every entry is a documented equivalence.
+EQUIVALENT_NAMES = {
+    "dynasty": {
+        "chaulukya": "solanki", "chalukya of gujarat": "solanki", "chalukyas of gujarat": "solanki",
+        "solanki": "solanki", "solankis": "solanki",
+        "vaghela": "vaghela", "vaghelas": "vaghela",
+    },
+}
+
 TITLES = {"queen", "rani", "king", "raja", "rana", "sultan", "maharaja", "maharani", "emperor", "sri", "shri"}
 
 
@@ -14,8 +24,9 @@ def normalise(field: str, value: str) -> str:
         if m:
             return m.group(1)
     v = re.sub(r"[^\w\s]", " ", v)
-    words = [w for w in v.split() if w not in TITLES]
-    return " ".join(words)
+    words = [w for w in v.split() if w not in TITLES and w not in {"dynasty", "the"}]
+    key = " ".join(words)
+    return EQUIVALENT_NAMES.get(field, {}).get(key, key)
 
 
 def _same(a: str, b: str) -> bool:
