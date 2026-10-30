@@ -6,7 +6,7 @@ from . import analysis, matching, models3d
 from .storage import StorageError, upload_bytes
 from .db import get_conn
 from .pipeline import reprocess_source
-from . import wiki
+from . import wiki, wikidata
 
 router = APIRouter()
 
@@ -33,7 +33,8 @@ def _entity_detail(conn, entity_id: int) -> dict | None:
     ).fetchall()
     rows = conn.execute(
         """select c.id, c.field, c.value, c.method, c.confidence, c.status, c.quote,
-                  ch.text as chunk_text, s.id as source_id, s.filename, s.file_url, ch.page
+                  ch.text as chunk_text, s.id as source_id, s.filename, s.file_url, ch.page,
+                  s.origin, s.source_url
            from claims c join sources s on s.id = c.source_id
            left join chunks ch on ch.id = c.chunk_id
            where c.entity_id = %s order by c.field, c.id""",
@@ -43,13 +44,15 @@ def _entity_detail(conn, entity_id: int) -> dict | None:
         {
             "id": r["id"], "field": r["field"], "value": r["value"], "method": r["method"],
             "confidence": r["confidence"], "status": r["status"],
-            "source": {"id": r["source_id"], "filename": r["filename"], "page": r["page"], "file_url": r["file_url"]},
+            "source": {"id": r["source_id"], "filename": r["filename"], "page": r["page"], "file_url": r["file_url"],
+                       "origin": r["origin"], "source_url": r["source_url"]},
             "evidence_text": r["quote"] or r["chunk_text"],
         }
         for r in rows
     ]
     sources = conn.execute(
-        """select s.id, s.filename, s.type, es.tag, s.file_url, s.lat, s.lng, s.description, s.status
+        """select s.id, s.filename, s.type, es.tag, s.file_url, s.lat, s.lng, s.description, s.status,
+                  s.origin, s.author, s.licence, s.source_url
            from entity_sources es join sources s on s.id = es.source_id
            where es.entity_id = %s order by s.type, s.id""",
         (entity_id,),
@@ -90,9 +93,10 @@ def _all_details(conn, etype: str | None) -> list[dict]:
         })
     sources_by: dict[int, list] = {i: [] for i in ids}
     for r in conn.execute(
-        "select es.entity_id, es.source_id, es.tag from entity_sources es where es.entity_id = any(%s)", (ids,)
+        """select es.entity_id, es.source_id, es.tag, s.type, s.origin
+           from entity_sources es join sources s on s.id = es.source_id where es.entity_id = any(%s)""", (ids,)
     ).fetchall():
-        sources_by[r["entity_id"]].append({"id": r["source_id"], "tag": r["tag"]})
+        sources_by[r["entity_id"]].append({"id": r["source_id"], "tag": r["tag"], "type": r["type"], "origin": r["origin"]})
     checklists: dict[str, list] = {}
     for r in conn.execute("select entity_type, required_item, label from checklist_items order by id").fetchall():
         checklists.setdefault(r["entity_type"], []).append(r)
@@ -135,14 +139,23 @@ def get_entity(entity_id: int):
 FIELD_LABELS = {
     "built_date": "date of construction", "builder": "builder / patron", "dynasty": "dynasty",
     "location": "location", "architectural_style": "architectural style", "material": "material",
-    "purpose": "purpose", "inscription": "inscription",
+    "purpose": "purpose", "inscription": "inscription", "heritage_status": "heritage status",
 }
 
 
 def build_todo(detail: dict) -> list[dict]:
     """What a fellow should do at this monument on the next field visit:
-    document every missing checklist item, and check on site every disagreement."""
+    document every missing checklist item, add the archive's own record where only published
+    material exists, and check on site every disagreement."""
     todo = [{"kind": "document", "item": g["required_item"], "text": g["label"]} for g in detail["gaps"]]
+    sources = detail.get("sources", [])
+    photos = [s for s in sources if s.get("type") == "photo"]
+    if photos and all(s.get("origin") == "web" for s in photos):
+        todo.append({"kind": "document", "item": "own_photo",
+                     "text": "Only a published photo so far: take our own photographs"})
+    if sources and all(s.get("origin") == "web" for s in sources):
+        todo.append({"kind": "document", "item": "field_record",
+                     "text": "No field record yet, only published references: write field notes on site"})
     for c in detail["conflicts"]:
         values = list(dict.fromkeys(k["value"] for k in c["claims"]))
         label = FIELD_LABELS.get(c["field"], c["field"].replace("_", " "))
@@ -327,6 +340,40 @@ def import_wikipedia(body: WikiImport, background: BackgroundTasks):
         raise HTTPException(400, "Give at least one article title.")
     background.add_task(_import_all, titles, body.hindi)
     return {"queued": titles}
+
+
+class WikidataImport(BaseModel):
+    entity_ids: list[int] | None = None   # default: every monument with an imported Wikipedia article
+    photos: bool = True                   # also import the item's main photo from Wikimedia Commons
+
+
+def _import_wikidata_all(entity_ids: list[int], photos: bool) -> None:
+    for eid in entity_ids:
+        try:
+            result = wikidata.import_monument(eid, photos=photos)
+            wikidata.log.info("Wikidata import for monument %s: %s", eid, result)
+        except Exception:  # one failed item must not stop the rest
+            wikidata.log.exception("Wikidata import failed for monument %s", eid)
+
+
+@router.post("/import/wikidata", status_code=202)
+def import_wikidata(body: WikidataImport, background: BackgroundTasks):
+    """Structured facts from Wikidata (built date, architect / patron, heritage status, style, material,
+    coordinates) and the item's main photo from Wikimedia Commons, for monuments that have an imported
+    English Wikipedia article. Facts are stored as an attributed source (CC0) and quoted line by line;
+    photos keep their author and licence and go through the normal photo pipeline."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """select distinct e.id from entities e join sources s on s.entity_id = e.id
+               where e.type = 'monument' and s.type = 'web' and s.source_url like 'https://en.wikipedia.org/%%'
+               and (%s::bigint[] is null or e.id = any(%s::bigint[])) order by e.id""",
+            (body.entity_ids, body.entity_ids),
+        ).fetchall()
+    ids = [r["id"] for r in rows]
+    if not ids:
+        raise HTTPException(400, "None of those monuments has an imported English Wikipedia article.")
+    background.add_task(_import_wikidata_all, ids, body.photos)
+    return {"queued": ids}
 
 
 @router.post("/admin/reprocess", status_code=202)

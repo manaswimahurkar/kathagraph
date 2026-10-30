@@ -97,3 +97,15 @@ def test_field_visit_todo_lists_gaps_then_disagreements():
 def test_location_wording_is_not_a_conflict():
     found = conflicts([claim(1, "location", "Pavagadh", SRC_A), claim(2, "location", "Pavagadh Hill, Panchmahal", SRC_B)])
     assert found == []
+
+
+def test_field_visit_todo_asks_for_our_own_record_when_only_published_material_exists():
+    from app.entities import build_todo
+    detail = {"gaps": [], "conflicts": [], "sources": [
+        {"id": 1, "type": "web", "origin": "web"}, {"id": 2, "type": "photo", "origin": "web"}]}
+    items = {t["item"] for t in build_todo(detail)}
+    assert {"own_photo", "field_record"} <= items
+
+    detail["sources"].append({"id": 3, "type": "photo", "origin": "field"})
+    items = {t["item"] for t in build_todo(detail)}
+    assert "own_photo" not in items and "field_record" not in items

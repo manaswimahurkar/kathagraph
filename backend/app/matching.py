@@ -25,6 +25,17 @@ SYNONYMS = {
     "talav": "lake", "talao": "lake",
 }
 TYPE_WORDS = {"vav", "mandir", "fort", "mahal", "tank", "kund", "lake"}
+# Words that say what kind of thing a place is, or where in it, but not which one.
+# A name made only of these ("Jama Mosque" = Friday Mosque, "temples on the island") fits many places.
+GENERIC_WORDS = TYPE_WORDS | {
+    "mandirs", "temples", "jain", "jaina", "derasar", "shrine", "shrines",
+    "jama", "jami", "jamia", "jumma", "juma", "jumah", "friday", "mosque", "mosques", "masjid",
+    "tomb", "tombs", "maqbara", "dargah", "cave", "caves", "stupa", "monastery", "gate", "gates", "darwaza",
+    "wall", "walls", "protection", "island", "on", "main", "old", "ancient", "great", "small", "big",
+    "complex", "group", "groups", "site", "sites", "ruins", "monument", "monuments", "building", "buildings",
+    "these", "this", "its", "other", "five", "two", "three",
+    "मन्दिर", "मन्दिरों", "मंदिरों", "इन", "यह", "ये", "मस्जिद", "जामा", "जामी", "गुफा", "गुफाएं", "दीवार",
+}
 MATCH_RATIO = 0.85
 GPS_RADIUS_KM = 2.0
 
@@ -34,6 +45,12 @@ def name_key(name: str) -> str:
     words = re.findall(r"[a-z\u0900-\u097f]+", name.lower())
     words = [SYNONYMS.get(w, w) for w in words if w not in CONNECTORS and len(w) > 1]
     return " ".join(dict.fromkeys(words))  # drop repeats, keep order
+
+
+def is_generic(name: str) -> bool:
+    """True for names that don't single out one place: 'Jama Mosque', 'protection wall', '५ मन्दिर'."""
+    words = name_key(name).split()
+    return all(w in GENERIC_WORDS or w.isdigit() for w in words)
 
 
 def core_words(key: str) -> set[str]:
@@ -98,6 +115,8 @@ def find_entity(conn, name: str, aliases: list[str]) -> int | None:
 
 
 def get_or_create(conn, name: str, etype: str, aliases: list[str]) -> int:
+    # Generic aliases ("Friday Mosque") would join unrelated places that share them
+    aliases = [a for a in aliases if a and not is_generic(a)]
     entity_id = find_entity(conn, name, aliases)
     if entity_id is None:
         entity_id = conn.execute(

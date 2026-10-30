@@ -14,8 +14,8 @@ _CATEGORY_RULES = [
     ("fort", r"\b(fort|qila|killa|darwaza|gate(way)?|uparkot|bhadra)\b"),
     ("palace", r"\b(palace|mahal|vilas)\b"),
     ("museum", r"\b(museum|ashram|smarak|sangrahalaya|mandir, porbandar|kirti mandir)\b"),
-    ("lake", r"\b(lake|talav|talao|tank|sarovar|kund)\b"),
     ("temple", r"\b(temples?|mandir|derasar|gurudwara|devalaya|mahalaya|shamlaji|ambaji|palitana|girnar|somnath|dwarkadhish)\b"),
+    ("lake", r"\b(lake|talav|talao|tank|sarovar|kund)\b"),
 ]
 
 

@@ -4,7 +4,7 @@
 /** "web" = published reference text imported from the web (Wikipedia), never a field record. */
 export type SourceType = "photo" | "pdf" | "note" | "csv" | "web";
 export type SourceStatus = "pending" | "processing" | "done" | "failed";
-export type ClaimMethod = "ocr" | "llm" | "exif" | "manual";
+export type ClaimMethod = "ocr" | "llm" | "exif" | "manual" | "import";
 export type ClaimStatus = "unverified" | "verified" | "rejected";
 export type EntityType = "monument" | "motif" | "craft" | "place" | "person";
 
@@ -47,7 +47,10 @@ export interface SearchResult {
   chunk_id: number;
   text: string;
   score: number;
-  source: { id: number; filename: string; type: SourceType; page: number | null };
+  source: {
+    id: number; filename: string; type: SourceType; page: number | null;
+    origin?: "web" | "field" | null; author?: string | null; licence?: string | null; source_url?: string | null;
+  };
   entities: { id: number; name: string }[];
 }
 export interface SearchResponse {
@@ -206,6 +209,7 @@ const FIELD_LABELS: Record<string, string> = {
   purpose: "Purpose",
   inscription: "Inscription",
   status: "Protection status",
+  heritage_status: "Heritage status",
   location: "Location",
 };
 

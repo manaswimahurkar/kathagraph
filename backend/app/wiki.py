@@ -99,11 +99,14 @@ def _save_source(article: dict, lang: str, entity_id: int) -> tuple[int, bytes] 
         if conn.execute("select 1 from sources where content_hash = %s", (digest,)).fetchone():
             return None
         source_id = conn.execute(
-            """insert into sources (type, filename, content_hash, lat, lng, exif_json)
+            """insert into sources (type, filename, content_hash, lat, lng, exif_json,
+                                   origin, author, licence, source_url, entity_id)
                values ('web', %s, %s, %s, %s, jsonb_build_object('web', jsonb_build_object(
-                 'url', %s::text, 'lang', %s::text, 'entity_id', %s::bigint)))
+                 'url', %s::text, 'lang', %s::text, 'entity_id', %s::bigint)),
+                 'web', 'Wikipedia contributors', %s, %s, %s)
                returning id""",
-            (filename, digest, article["lat"], article["lng"], article["url"], lang, entity_id),
+            (filename, digest, article["lat"], article["lng"], article["url"], lang, entity_id,
+             LICENCE, article["url"], entity_id),
         ).fetchone()["id"]
     try:
         url = upload_bytes(data, filename, "text/plain; charset=utf-8")

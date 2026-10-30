@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from . import embeddings
 from .db import get_conn
 from .entities import router as entities_router
-from .pipeline import embed_chunks, process_source
+from .pipeline import embed_chunks, process_source, rechunk_source
 from .storage import StorageError, upload_bytes
 
 logging.basicConfig(level=logging.INFO)
@@ -53,7 +53,8 @@ KINDS = {
     ".txt": "note", ".md": "note",
     ".csv": "csv",
 }
-SOURCE_FIELDS = "id, filename, type, status, error, lat, lng, captured_at, file_url, tag, description, created_at"
+SOURCE_FIELDS = ("id, filename, type, status, error, lat, lng, captured_at, file_url, tag, description, created_at, "
+                 "origin, author, licence, source_url")
 
 
 @app.get("/")
@@ -185,6 +186,10 @@ def _escape_like(word: str) -> str:
     return word.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+MAX_PER_SOURCE = 2
+PER_SOURCE_POOL = 5  # fetch this many times `limit` candidates before thinning
+
+
 @app.get("/search")
 def search(q: str, limit: int = 10):
     """Search all archive text. Meaning-based (any language) when Gemini is
@@ -194,7 +199,8 @@ def search(q: str, limit: int = 10):
         raise HTTPException(400, "Type something to search for.")
     limit = max(1, min(limit, 50))
     fields = """c.id as chunk_id, c.text, c.page, c.language,
-                s.id as source_id, s.filename, s.type, s.file_url"""
+                s.id as source_id, s.filename, s.type, s.file_url,
+                s.origin, s.author, s.licence, s.source_url"""
 
     rows, mode = None, "keyword"
     if embeddings.available():
@@ -207,7 +213,7 @@ def search(q: str, limit: int = 10):
                         where c.embedding is not null
                         order by c.embedding <=> %s::vector
                         limit %s""",
-                    (vec, vec, limit),
+                    (vec, vec, limit * PER_SOURCE_POOL),
                 ).fetchall()
             mode = "semantic"
         except embeddings.EmbeddingError as e:
@@ -224,8 +230,17 @@ def search(q: str, limit: int = 10):
                     where c.text ilike any(%s::text[])
                     order by score desc, c.id desc
                     limit %s""",
-                (patterns, len(patterns), patterns, limit),
+                (patterns, len(patterns), patterns, limit * PER_SOURCE_POOL),
             ).fetchall()
+
+    # At most MAX_PER_SOURCE passages from any one file, so a long article can't fill the page
+    per_source: dict[int, int] = {}
+    kept = []
+    for r in rows:
+        if per_source.get(r["source_id"], 0) < MAX_PER_SOURCE:
+            per_source[r["source_id"]] = per_source.get(r["source_id"], 0) + 1
+            kept.append(r)
+    rows = kept[:limit]
 
     # Which monuments each result's file is linked to (filled in by stage 4)
     source_ids = list({r["source_id"] for r in rows})
@@ -251,12 +266,36 @@ def search(q: str, limit: int = 10):
                 "source": {
                     "id": r["source_id"], "filename": r["filename"], "type": r["type"],
                     "page": r["page"], "file_url": r["file_url"],
+                    "origin": r["origin"], "author": r["author"], "licence": r["licence"],
+                    "source_url": r["source_url"],
                 },
                 "entities": linked.get(r["source_id"], []),
             }
             for r in rows
         ],
     }
+
+
+@app.post("/admin/rechunk")
+def rechunk(after_id: int = 0, batch: int = 5):
+    """Re-split stored text with the current chunker (passages start and end on whole words).
+    Works through files in id order, `batch` at a time; call again with the returned `next_after_id`
+    until it is null."""
+    batch = max(1, min(batch, 20))
+    with get_conn() as conn:
+        ids = [r["id"] for r in conn.execute(
+            "select distinct source_id as id from chunks where source_id > %s order by source_id limit %s",
+            (after_id, batch),
+        ).fetchall()]
+    done, failed = {}, {}
+    for sid in ids:
+        try:
+            done[sid] = rechunk_source(sid)
+        except Exception as e:  # keep going; the old passages stay in place for this file
+            log.exception("Re-chunk failed for source %s", sid)
+            failed[sid] = str(e)[:200]
+    return {"rechunked": {k: v for k, v in done.items() if v}, "unchanged": [k for k, v in done.items() if not v],
+            "failed": failed, "next_after_id": ids[-1] if len(ids) == batch else None}
 
 
 @app.post("/admin/reindex")

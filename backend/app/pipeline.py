@@ -44,9 +44,19 @@ def _find_chunk(quote: str, chunks: list[tuple[int, str]]) -> int | None:
 def _save_claims(source_id: int, found: list[dict], chunks: list[tuple[int, str]]) -> list[int]:
     entity_ids = []
     with get_conn() as conn:
+        # A published article is about one monument; generic names in it ("the Jama Mosque") mean that one
+        row = conn.execute("select entity_id from sources where id = %s", (source_id,)).fetchone()
+        home = row["entity_id"] if row else None
         for ent in found:
-            entity_id = matching.get_or_create(conn, ent["name"], ent["type"], ent["aliases"])
-            entity_ids.append(entity_id)
+            if matching.is_generic(ent["name"]):
+                if home is None:
+                    log.info("Source %s: skipped facts about %r (name fits many places)", source_id, ent["name"])
+                    continue
+                entity_id = home
+            else:
+                entity_id = matching.get_or_create(conn, ent["name"], ent["type"], ent["aliases"])
+            if entity_id not in entity_ids:
+                entity_ids.append(entity_id)
             matching.link(conn, entity_id, source_id, None)
             for c in ent["claims"]:
                 conn.execute(
@@ -148,23 +158,20 @@ def _process(source_id: int, data: bytes, kind: str):
             except gemini.GeminiError as e:
                 warnings.append(f"Facts not extracted: {e}")
 
-        # 6. Link photos to their monument (filename / GPS), then retry older photos
+        # 6. Link the file to its monument(s). Imported items (a Wikipedia article, a Commons photo)
+        #    always belong to the monument they were imported for; other photos are matched by
+        #    the names in their text, then by filename, then by GPS.
         with get_conn() as conn:
+            home = conn.execute("select entity_id from sources where id = %s", (source_id,)).fetchone()["entity_id"]
+            if home:
+                matching.link(conn, home, source_id, tag if kind == "photo" else "reference")
             if kind == "photo":
                 if linked:
                     for eid in linked:
                         matching.link(conn, eid, source_id, tag)
-                else:
+                elif not home:
                     matching.link_photo(conn, {"id": source_id, "filename": source["filename"],
                                                "lat": meta["lat"], "lng": meta["lng"], "tag": tag})
-            if kind == "web":
-                # A published article is always evidence for the monument it was imported for
-                row = conn.execute(
-                    "select (exif_json->'web'->>'entity_id')::bigint as eid from sources where id = %s",
-                    (source_id,),
-                ).fetchone()
-                if row and row["eid"]:
-                    matching.link(conn, row["eid"], source_id, "reference")
             matching.relink_unlinked_photos(conn)
 
         _set_status(source_id, "done", " ".join(warnings) or None)
@@ -187,3 +194,44 @@ def reprocess_source(source_id: int) -> None:
         _set_status(source_id, "failed", f"Could not download stored file: {e}")
         return
     process_source(source_id, resp.content, src["type"])
+
+
+def rechunk_source(source_id: int) -> int:
+    """Re-split a file's stored text with the current chunker, without re-running OCR or fact
+    extraction. Old passages are stitched back into the original text, split again, embedded,
+    and each fact is pointed at the new passage that holds its quote. Returns the new passage count
+    (0 if nothing changed). AI photo descriptions are left as they are."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "select id, page, text from chunks where source_id = %s order by id", (source_id,)
+        ).fetchall()
+    old = [r for r in rows if not r["text"].startswith("[AI")]
+    if not old:
+        return 0
+    pages: dict = {}
+    for r in old:
+        pages.setdefault(r["page"], []).append(r["text"])
+    pieces = [(page, piece, text_extract.detect_language(piece))
+              for page, texts in pages.items()
+              for piece in text_extract.chunk(text_extract.stitch(texts))]
+    if [p[1] for p in pieces] == [r["text"] for r in old]:
+        return 0
+
+    vectors = embeddings.embed([p[1] for p in pieces], "RETRIEVAL_DOCUMENT") if embeddings.available() else None
+    with get_conn() as conn:  # one transaction: the file is never left without passages
+        new_chunks = []
+        for i, (page, piece, lang) in enumerate(pieces):
+            cid = conn.execute(
+                """insert into chunks (source_id, page, text, language, embedding)
+                   values (%s, %s, %s, %s, %s::vector) returning id""",
+                (source_id, page, piece, lang, embeddings.to_pg(vectors[i]) if vectors else None),
+            ).fetchone()["id"]
+            new_chunks.append((cid, piece))
+        for c in conn.execute(
+            "select id, quote from claims where source_id = %s and chunk_id = any(%s)",
+            (source_id, [r["id"] for r in old]),
+        ).fetchall():
+            conn.execute("update claims set chunk_id = %s where id = %s",
+                         (_find_chunk(c["quote"] or "", new_chunks), c["id"]))
+        conn.execute("delete from chunks where id = any(%s)", ([r["id"] for r in old],))
+    return len(pieces)

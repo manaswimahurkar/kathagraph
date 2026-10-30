@@ -120,3 +120,14 @@ create table if not exists models (
   created_at  timestamptz not null default now()
 );
 alter table models enable row level security;
+
+-- Where each source comes from (v0.8)
+alter table sources add column if not exists origin text not null default 'field'
+  check (origin in ('field', 'web'));
+alter table sources add column if not exists author text;
+alter table sources add column if not exists licence text;
+alter table sources add column if not exists source_url text;
+alter table sources add column if not exists entity_id bigint references entities(id) on delete set null;
+alter table claims drop constraint if exists claims_method_check;
+alter table claims add constraint claims_method_check
+  check (method in ('ocr', 'llm', 'exif', 'manual', 'import'));

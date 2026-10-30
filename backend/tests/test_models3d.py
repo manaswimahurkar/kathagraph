@@ -9,7 +9,7 @@ from app.models3d import ModelError, category_for, sketchfab_uid
     ("Sun Temple, Modhera", "temple"), ("Palitana temples", "temple"), ("Somnath Temple", "temple"),
     ("Sidi Saiyyed Mosque", "mosque"), ("Sarkhej Roza", "tomb"), ("Mahabat Maqbara complex", "tomb"),
     ("Uparkot Fort", "fort"), ("Teen Darwaza", "fort"), ("Talaja Caves", "cave"),
-    ("Kankaria Lake", "lake"), ("Sahasralinga Tank", "lake"), ("Lakshmi Vilas Palace, Vadodara", "palace"),
+    ("Kankaria Lake", "lake"), ("Temples at Narayan Sarovar", "temple"), ("Narayan Sarovar", "lake"), ("Sahasralinga Tank", "lake"), ("Lakshmi Vilas Palace, Vadodara", "palace"),
     ("Aina Mahal", "palace"), ("Sabarmati Ashram", "museum"), ("Lothal", "site"), ("Dholavira", "site"),
 ])
 def test_category_from_name(name, category):

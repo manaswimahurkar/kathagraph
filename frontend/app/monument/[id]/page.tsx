@@ -231,6 +231,7 @@ const METHOD_LABEL: Record<Claim["method"], string> = {
   llm: "extracted by AI",
   exif: "from photo GPS",
   manual: "entered by hand",
+  import: "from Wikidata",
 };
 
 function KnownFacts({

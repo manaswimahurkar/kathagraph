@@ -9,6 +9,7 @@ OCR uses Tesseract with Hindi + English. It is installed in the Docker image
 (Render). On a laptop without Tesseract, OCR is skipped with a clear message.
 """
 import logging
+import re
 from dataclasses import dataclass, field
 from io import BytesIO
 
@@ -166,8 +167,28 @@ def detect_language(text: str) -> str:
     return "mixed"
 
 
+SENTENCE_START = re.compile(r"(?:\n\s*|[.!?\u0964][\"\u201d\u2019)\]]?\s+)(?=\S)")
+
+
+def _start_at_boundary(text: str, start: int, limit: int) -> int:
+    """Move a chunk start forward to the next sentence (or at least word) start before `limit`,
+    so no passage begins in the middle of a word."""
+    if start == 0:
+        return 0
+    # Already at a sentence start (just after a full stop or a line break)?
+    m = SENTENCE_START.search(text, max(0, start - 3), start + 1)
+    if m and m.end() == start:
+        return start
+    m = SENTENCE_START.search(text, start, limit)
+    if m:
+        return m.end()
+    space = text.find(" ", start, limit)
+    return space + 1 if space != -1 else start
+
+
 def chunk(text: str, size: int = 900, overlap: int = 150) -> list[str]:
-    """Split text into ~size-character pieces on paragraph/sentence boundaries."""
+    """Split text into ~size-character pieces that end on a paragraph or sentence boundary
+    and start at the beginning of a sentence (or word), overlapping a little for context."""
     text = text.strip()
     if len(text) <= size:
         return [text] if text else []
@@ -179,10 +200,29 @@ def chunk(text: str, size: int = 900, overlap: int = 150) -> list[str]:
             cut = max(window.rfind("\n\n"), window.rfind("\n"), window.rfind(". "), window.rfind("\u0964"))
             if cut > size // 2:
                 end = start + cut + 1
+            else:
+                space = window.rfind(" ")
+                if space > size // 2:
+                    end = start + space
         piece = text[start:end].strip()
         if piece:
             pieces.append(piece)
         if end >= len(text):
             break
-        start = max(end - overlap, start + 1)
+        start = max(_start_at_boundary(text, max(end - overlap, start + 1), end), start + 1)
     return pieces
+
+
+def stitch(pieces: list[str]) -> str:
+    """Rebuild the original text from overlapping chunks made by the older chunker."""
+    if not pieces:
+        return ""
+    text = pieces[0]
+    for nxt in pieces[1:]:
+        probe = nxt[:60]
+        p = text.rfind(probe, max(0, len(text) - 400)) if probe else -1
+        if p != -1 and nxt.startswith(text[p:].strip()):
+            text = text[:p] + nxt
+        else:
+            text = text + "\n" + nxt
+    return text

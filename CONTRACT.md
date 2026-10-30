@@ -171,3 +171,17 @@ All of these are live; the shapes above are unchanged, only extra fields were ad
 - `GET /entities/{id}`: `models: [...]` (same shape as the POST response).
 - `PATCH /entities/{id}`: also accepts `coord_precision`.
 - Source `type` can be `web` (published reference, never a field record).
+
+## Added Fri 30 Oct (backend v0.8)
+
+- `GET /search` → shape unchanged. Passages now start and end on whole words (sentences where possible), and at most **2 passages per source** are returned, so one long article can't fill the page.
+- `POST /admin/rechunk?after_id=0&batch=5` → re-splits stored text with the new chunker (no OCR or fact extraction re-run; facts keep pointing at the passage holding their quote). Call repeatedly with the returned `next_after_id` until it is `null`.
+  → `{ "rechunked": {source_id: n_passages}, "unchanged": [ids], "failed": {id: error}, "next_after_id": id | null }`
+- Monument matching: names that fit many places ("Jama Mosque", "temples on the island", "५ मन्दिर") no longer create or join a monument. In an imported Wikipedia article they mean the article's own monument; elsewhere those facts are skipped.
+- `category`: "temple" is now checked before "lake", so "Temples at Narayan Sarovar" is a temple.
+- **Provenance on every source** (needs `backend/migrations/2026-10-30_provenance.sql`): sources in `/entities/{id}`, `/sources/{id}` and `/search` results carry
+  `origin` (`"field"` = uploaded by a contributor, `"web"` = imported from Wikipedia / Wikidata / Commons), `author`, `licence`, `source_url`. Claims' `source` also has `origin` and `source_url`.
+- `POST /import/wikidata` `{ "entity_ids": [..] | null, "photos": true }` → `202 { "queued": [ids] }`. For monuments with an imported English Wikipedia article:
+  Wikidata facts (`built_date`, `builder`, `architectural_style`, `material`, `heritage_status`) stored as source `wikidata_Q….txt` (CC0) with one quoted line per fact, `method: "import"`;
+  coordinates when the monument has none; the item's main photo from Wikimedia Commons as a `photo` source with `origin: "web"`, `author`, `licence`, `source_url` (free licences only).
+- `/priorities` todo: new items `own_photo` ("Only a published photo so far: take our own photographs") and `field_record` ("No field record yet, only published references: write field notes on site").

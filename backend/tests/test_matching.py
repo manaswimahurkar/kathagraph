@@ -35,3 +35,21 @@ def test_filename_words_ignore_camera_noise():
 
 def test_distance_between_adalaj_and_patan_is_about_90_km():
     assert 85 < distance_km(23.1667, 72.5800, 23.8589, 72.1016) < 95
+
+
+@pytest.mark.parametrize("name", [
+    "Jama Mosque", "Jami Masjid", "Friday Mosque", "protection wall", "temples on the island",
+    "Jain temples", "५ मन्दिर", "इन मन्दिरों",
+])
+def test_generic_names_are_not_a_monument_of_their_own(name):
+    from app.matching import is_generic
+    assert is_generic(name)
+
+
+@pytest.mark.parametrize("name", [
+    "Jama Mosque, Ahmedabad", "Jama Mosque, Champaner", "Rani ki Vav", "Sun Temple, Modhera",
+    "Trikamray temple", "Uparkot Caves", "Girnar", "Lothal", "Sidi Saiyyed Mosque",
+])
+def test_named_monuments_are_not_generic(name):
+    from app.matching import is_generic
+    assert not is_generic(name)
