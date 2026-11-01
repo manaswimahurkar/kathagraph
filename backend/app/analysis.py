@@ -65,8 +65,85 @@ def normalise(field: str, value: str) -> str:
     return EQUIVALENT_NAMES.get(field, {}).get(key, key)
 
 
+ROMAN = {"i", "ii", "iii", "iv", "v", "vi", "vii", "viii"}
+_HONORIFIC_SUFFIX = re.compile(r"(deva|dev)$")
+_ORDINAL = r"(\d{1,2})(?:st|nd|rd|th)"
+
+
+def _name_parts(key: str) -> tuple[list[str], str]:
+    """Regnal numbers apart, honorific '-deva' dropped: 'bhima i' -> (['i'], 'bhima'), 'bhimadev' -> ([], 'bhima')."""
+    words = key.split()
+    numerals = [w for w in words if w in ROMAN]
+    rest = [_HONORIFIC_SUFFIX.sub("", w) if len(w) > 5 else w for w in words if w not in ROMAN]
+    return numerals, " ".join(rest)
+
+
+def _same_name(a: str, b: str) -> bool:
+    if a == b:
+        return True
+    na, ra = _name_parts(a)
+    nb, rb = _name_parts(b)
+    if na and nb and na != nb:  # Bhima I and Bhima II are different kings
+        return False
+    if SequenceMatcher(None, a, b).ratio() >= 0.85:
+        return True
+    return bool(ra) and (ra == rb or SequenceMatcher(None, ra, rb).ratio() >= 0.85)
+
+
+def year_range(value: str) -> tuple[int, int] | None:
+    """The span of years a date statement allows, at its own precision:
+    '1026' -> (1026, 1026); '1026-1027' -> (1026, 1027); '1060s' -> (1060, 1069);
+    '11th century' -> (1001, 1100); '2400 BCE' -> (-2400, -2400); 'VS 1555' -> (1498, 1499)."""
+    v = to_latin(value).lower().replace("\u2013", "-").replace("\u2014", "-")
+    bce = bool(re.search(r"\b(bce|bc)\b", v))
+    sign = -1 if bce else 1
+    vikram = bool(re.search(r"\b(vs|v\.s\.|vikram|samvat)\b", v))
+    m = re.search(_ORDINAL + r"\s*millennium", v)
+    if m:
+        n = int(m.group(1))
+        lo, hi = (n - 1) * 1000 + 1, n * 1000
+        return (-hi, -lo) if bce else (lo, hi)
+    m = re.search(_ORDINAL + r"\s*century", v)
+    if m:
+        n = int(m.group(1))
+        lo, hi = (n - 1) * 100 + 1, n * 100
+        return (-hi, -lo) if bce else (lo, hi)
+    m = re.search(r"\b(\d{3,4})s\b", v)
+    if m:
+        y = int(m.group(1))
+        return (sign * y, sign * (y + 9)) if not bce else (-(y + 9), -y)
+    m = re.search(r"\b(\d{3,4})\s*-\s*(\d{2,4})\b", v)
+    if m:
+        a, b = m.group(1), m.group(2)
+        b = a[: len(a) - len(b)] + b if len(b) < len(a) else b  # 1026-27 -> 1026-1027
+        lo, hi = sorted((int(a), int(b)))
+        if vikram:
+            lo, hi = lo - 57, hi - 56
+        return (-hi, -lo) if bce else (lo, hi)
+    m = re.search(r"\b(\d{3,4})\b", v)
+    if m:
+        y = int(m.group(1))
+        if vikram:  # Vikram Samvat runs 56-57 years ahead of the Common Era
+            return (y - 57, y - 56)
+        return (sign * y, sign * y)
+    return None
+
+
+def _overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
+    return a[0] <= b[1] and b[0] <= a[1]
+
+
+def _agree(field: str, a: str, b: str) -> bool:
+    """Do two values of the same field say compatible things?"""
+    if field == "built_date":
+        ra, rb = year_range(a), year_range(b)
+        if ra and rb:
+            return _overlap(ra, rb)
+    return _same_name(normalise(field, a), normalise(field, b))
+
+
 def _same(a: str, b: str) -> bool:
-    return a == b or SequenceMatcher(None, a, b).ratio() >= 0.85
+    return _same_name(a, b)
 
 
 def conflicts(claims: list[dict]) -> list[dict]:
@@ -76,9 +153,10 @@ def conflicts(claims: list[dict]) -> list[dict]:
         group = [c for c in claims if c["field"] == field and c["status"] != "rejected"]
         buckets: list[list[dict]] = []
         for c in group:
-            key = normalise(field, c["value"])
+            # A value joins a group only if it agrees with every value already in it,
+            # so "11th century" can't link "1026" and "1099" into one group.
             for b in buckets:
-                if _same(key, normalise(field, b[0]["value"])):
+                if all(_agree(field, c["value"], k["value"]) for k in b):
                     b.append(c)
                     break
             else:

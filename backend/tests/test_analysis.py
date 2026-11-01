@@ -1,3 +1,4 @@
+import pytest
 """Conflict and gap detection on a monument's claims."""
 from app.analysis import conflicts, gaps, normalise
 
@@ -109,3 +110,54 @@ def test_field_visit_todo_asks_for_our_own_record_when_only_published_material_e
     detail["sources"].append({"id": 3, "type": "photo", "origin": "field"})
     items = {t["item"] for t in build_todo(detail)}
     assert "own_photo" not in items and "field_record" not in items
+
+
+@pytest.mark.parametrize("value, span", [
+    ("1026", (1026, 1026)),
+    ("1026-1027", (1026, 1027)),
+    ("1026–27", (1026, 1027)),
+    ("1060s", (1060, 1069)),
+    ("11th century", (1001, 1100)),
+    ("early 15th century CE", (1401, 1500)),
+    ("2400 BCE", (-2400, -2400)),
+    ("3rd millennium BCE", (-3000, -2001)),
+    ("VS 1555", (1498, 1499)),
+    ("c. 1063 CE", (1063, 1063)),
+    ("unknown", None),
+])
+def test_year_range(value, span):
+    from app.analysis import year_range
+    assert year_range(value) == span
+
+
+def _claim(i, field, value):
+    return {"id": i, "field": field, "value": value, "status": "unverified", "source": {"id": i, "filename": f"s{i}"}}
+
+
+def test_dates_at_different_precision_do_not_disagree():
+    from app.analysis import conflicts
+    claims = [_claim(1, "built_date", "11th century"), _claim(2, "built_date", "1026-1027"), _claim(3, "built_date", "1026")]
+    assert conflicts(claims) == []
+
+
+def test_different_exact_years_still_disagree():
+    from app.analysis import conflicts
+    claims = [_claim(1, "built_date", "1498"), _claim(2, "built_date", "1499"), _claim(3, "built_date", "VS 1555")]
+    found = conflicts(claims)
+    assert len(found) == 1 and found[0]["field"] == "built_date"
+
+
+def test_century_does_not_join_two_different_years():
+    from app.analysis import conflicts
+    claims = [_claim(1, "built_date", "1026"), _claim(2, "built_date", "1099"), _claim(3, "built_date", "11th century")]
+    assert len(conflicts(claims)) == 1
+
+
+def test_regnal_names_and_honorifics():
+    from app.analysis import conflicts
+    same = [_claim(1, "builder", "Bhima I"), _claim(2, "builder", "भीमदेव"), _claim(3, "builder", "King Bhimadeva")]
+    assert conflicts(same) == []
+    different = [_claim(1, "builder", "Bhima I"), _claim(2, "builder", "Bhima II")]
+    assert len(conflicts(different)) == 1
+    other_king = [_claim(1, "builder", "Bhima I"), _claim(2, "builder", "Karna I")]
+    assert len(conflicts(other_king)) == 1
