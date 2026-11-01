@@ -199,3 +199,11 @@ All of these are live; the shapes above are unchanged, only extra fields were ad
 - `GET /review?limit=30` → `{ totals: {unverified, verified, rejected, in_queue}, claims: [{ id, entity: {id, name}, field, field_label, value, quote, method, confidence, risk, reasons: [string], excerpt, source: {id, filename, origin, file_url, source_url} }] }`, riskiest first. Verify/reject with `PATCH /claims/{id}`.
 - `GET /timeline` → `{ monuments: [{ id, name, category, dynasty, span: [startYear, endYear], verified, disputed, variants: [{ value, span, sources, verified }] }], undated: [{ id, name, category, dynasty }] }`. Years BCE are negative.
 - `POST /inscription/read` (multipart `file`: jpg/png/webp ≤ 15 MB) → `{ is_inscription, script, language, legibility, transcription, transliteration, translation_en, dates: [{ as_written, calendar, year, common_era: [lo, hi] | null }], names, uncertain, notice }`. Nothing is stored.
+
+## Added Sun 1 Nov evening (backend v1.0) — needs `backend/migrations/2026-11-01_decks_and_merge.sql`
+
+- `POST /upload` now also accepts **`.pptx`** (type `"slides"`, ≤ 50 MB), **`.docx`** (type `"doc"`, ≤ 50 MB) and **`.zip`** folders (≤ 100 MB, ≤ 200 files; unpacked, folder names kept in file names as context). Optional form fields `contributor` and `cohort` are stored as the source's `author` ("Asha Patel · Explorer Fellowship 2024"). Response adds `skipped: [names]` for files in a zip the archive can't read.
+  Decks: one page per slide (text + speaker notes), so facts cite "page" = slide number. Photos inside decks/reports become their own `photo` sources (`parent_source_id` = the deck), named after their slide title, credited like the parent, and linked to the parent's monument when the deck is about one.
+- `GET /duplicates?limit=30` → `{ pairs: [{ score, reasons, a: {id, name, aliases, lat, lng, category, n_sources, n_claims}, b: {…} }], total }`.
+- `POST /entities/{keep_id}/merge` `{ duplicate_id }` → moves facts, files, aliases, models and location onto `keep_id`, deletes the duplicate → `{ kept: {id, name}, merged }`.
+- `POST /duplicates/dismiss` `{ a, b }` → remembered as different places; never suggested again.

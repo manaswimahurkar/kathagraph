@@ -75,6 +75,12 @@ export default function ReviewPage() {
         Every fact the AI pulled from a document starts unverified. These are the ones most likely to be wrong, first:
         check each against its passage, then verify or reject it. Rejected facts stop counting anywhere in the archive.
       </p>
+      <p className="mt-2 text-[14px]">
+        Also:{" "}
+        <Link href="/duplicates" className="text-water underline underline-offset-2">
+          monuments that may be recorded twice →
+        </Link>
+      </p>
 
       {state.kind === "loading" && (
         <div role="status" className="mt-8 space-y-3">

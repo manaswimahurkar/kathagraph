@@ -579,6 +579,8 @@ const TYPE_PLURAL: Record<string, [string, string]> = {
   note: ["field note", "field notes"],
   csv: ["spreadsheet", "spreadsheets"],
   web: ["published reference", "published references"],
+  slides: ["slide deck", "slide decks"],
+  doc: ["Word report", "Word reports"],
 };
 
 function AtAGlance({ entity }: { entity: EntityDetail }) {
@@ -710,7 +712,7 @@ function Contribute({ entity }: { entity: EntityDetail }) {
 
 // ---------- Sources ----------
 
-const TYPE_LABEL = { photo: "Photo", pdf: "PDF scan", note: "Field note", csv: "Spreadsheet", web: "Wikipedia (published reference)" } as const;
+const TYPE_LABEL = { photo: "Photo", pdf: "PDF scan", note: "Field note", csv: "Spreadsheet", web: "Wikipedia (published reference)", slides: "Slide deck", doc: "Word report" } as const;
 
 function SourceList({ entity }: { entity: EntityDetail }) {
   return (

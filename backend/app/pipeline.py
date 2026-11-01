@@ -76,12 +76,47 @@ _one_at_a_time = threading.Lock()
 
 
 def process_source(source_id: int, data: bytes, kind: str):
+    children: list[tuple[int, bytes]] = []
     with _one_at_a_time:
         try:
-            _process(source_id, data, kind)
+            children = _process(source_id, data, kind) or []
         finally:
             del data
             gc.collect()
+    # Photos taken out of a deck or report: each is processed like any uploaded photo,
+    # after the parent, so they can fall back on the monument the parent was linked to.
+    for child_id, child_data in children:
+        process_source(child_id, child_data, "photo")
+
+
+def _save_embedded_images(source_id: int, images: list) -> list[tuple[int, bytes]]:
+    """Store photos found inside a deck or report as their own sources, credited like the parent."""
+    import hashlib
+    from .storage import StorageError, upload_bytes
+
+    with get_conn() as conn:
+        parent = conn.execute("select author, origin from sources where id = %s", (source_id,)).fetchone()
+    out = []
+    for img in images:
+        digest = hashlib.sha256(img.data).hexdigest()
+        with get_conn() as conn:
+            if conn.execute("select 1 from sources where content_hash = %s", (digest,)).fetchone():
+                continue
+            child = conn.execute(
+                """insert into sources (type, filename, content_hash, parent_source_id, author, origin)
+                   values ('photo', %s, %s, %s, %s, %s) returning id""",
+                (img.name, digest, source_id, parent["author"], parent["origin"]),
+            ).fetchone()["id"]
+        ext = img.name.rsplit(".", 1)[-1].lower()
+        try:
+            url = upload_bytes(img.data, img.name, "image/png" if ext == "png" else "image/jpeg")
+        except StorageError as e:
+            _set_status(child, "failed", str(e)[:500])
+            continue
+        with get_conn() as conn:
+            conn.execute("update sources set file_url = %s, status = 'pending' where id = %s", (url, child))
+        out.append((child, img.data))
+    return out
 
 
 def _process(source_id: int, data: bytes, kind: str):
@@ -123,7 +158,7 @@ def _process(source_id: int, data: bytes, kind: str):
         if kind == "photo" and not needs_ocr:
             extracted = text_extract.Extracted()
         else:
-            extracted = text_extract.extract(kind, data)
+            extracted = text_extract.extract(kind, data, source["filename"].rsplit(".", 1)[0])
         if extracted.warning:
             warnings.append(extracted.warning)
         pieces = [(page, piece, text_extract.detect_language(piece))
@@ -170,12 +205,27 @@ def _process(source_id: int, data: bytes, kind: str):
                     for eid in linked:
                         matching.link(conn, eid, source_id, tag)
                 elif not home:
-                    matching.link_photo(conn, {"id": source_id, "filename": source["filename"],
-                                               "lat": meta["lat"], "lng": meta["lng"], "tag": tag})
+                    found_id = matching.link_photo(conn, {"id": source_id, "filename": source["filename"],
+                                                          "lat": meta["lat"], "lng": meta["lng"], "tag": tag})
+                    if found_id is None:
+                        # A photo from a deck or report: if the document is about one monument, so is the photo
+                        parent = conn.execute("select parent_source_id from sources where id = %s",
+                                              (source_id,)).fetchone()["parent_source_id"]
+                        if parent:
+                            ents = conn.execute("select entity_id from entity_sources where source_id = %s",
+                                                (parent,)).fetchall()
+                            if len(ents) == 1:
+                                matching.link(conn, ents[0]["entity_id"], source_id, tag)
             matching.relink_unlinked_photos(conn)
 
+        children = []
+        if extracted.images:
+            children = _save_embedded_images(source_id, extracted.images)
+            if children:
+                warnings.append(f"{len(children)} photo(s) found inside; each is processed as its own file.")
         _set_status(source_id, "done", " ".join(warnings) or None)
         log.info("Source %s done: %d chunk(s), %d entity link(s)", source_id, len(chunks), len(linked))
+        return children
     except Exception as e:  # one bad file must never take the server down
         log.exception("Processing failed for source %s", source_id)
         _set_status(source_id, "failed", str(e)[:500])

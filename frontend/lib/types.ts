@@ -2,7 +2,7 @@
 // If CONTRACT.md changes, update this file (and lib/mock.ts) to match.
 
 /** "web" = published reference text imported from the web (Wikipedia), never a field record. */
-export type SourceType = "photo" | "pdf" | "note" | "csv" | "web";
+export type SourceType = "photo" | "pdf" | "note" | "csv" | "web" | "slides" | "doc";
 export type SourceStatus = "pending" | "processing" | "done" | "failed";
 export type ClaimMethod = "ocr" | "llm" | "exif" | "manual" | "import";
 export type ClaimStatus = "unverified" | "verified" | "rejected";
@@ -28,6 +28,8 @@ export interface UploadedSource {
 }
 export interface UploadResponse {
   sources: UploadedSource[];
+  /** Files inside a .zip that the archive can't read (backend v1.0+). */
+  skipped?: string[];
 }
 
 /** GET /sources/{id} — used to poll processing status */
@@ -280,6 +282,28 @@ export interface InscriptionReading {
   names: string[];
   uncertain: string[];
   notice: string;
+}
+
+/** GET /duplicates: monuments that may be recorded twice. */
+export interface DuplicateSide {
+  id: number;
+  name: string;
+  aliases: string[];
+  lat: number | null;
+  lng: number | null;
+  category: string;
+  n_sources: number;
+  n_claims: number;
+}
+export interface DuplicatePair {
+  score: number;
+  reasons: string[];
+  a: DuplicateSide;
+  b: DuplicateSide;
+}
+export interface DuplicatesResponse {
+  pairs: DuplicatePair[];
+  total: number;
 }
 
 /** PATCH /claims/{id} */

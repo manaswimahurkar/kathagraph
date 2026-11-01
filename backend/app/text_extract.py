@@ -49,6 +49,7 @@ def _ocr_langs(pytesseract) -> str:
 class Extracted:
     pages: list[tuple[int | None, str]] = field(default_factory=list)  # (page number, text)
     warning: str | None = None
+    images: list = field(default_factory=list)  # office.Image: photos embedded in a deck or report
 
 
 def _decode(data: bytes) -> str:
@@ -138,12 +139,19 @@ def _from_pdf(data: bytes) -> Extracted:
     return out
 
 
-def extract(kind: str, data: bytes) -> Extracted:
+def extract(kind: str, data: bytes, stem: str = "file") -> Extracted:
     if kind in ("note", "csv", "web"):
         text = _decode(data).strip()
         return Extracted(pages=[(None, text)] if text else [])
     if kind == "pdf":
         return _from_pdf(data)
+    if kind in ("slides", "doc"):
+        from . import office
+        try:
+            doc = office.read_pptx(data, stem) if kind == "slides" else office.read_docx(data, stem)
+        except office.OfficeError as e:
+            return Extracted(warning=str(e))
+        return Extracted(pages=doc.pages, images=doc.images)
     if kind == "photo":
         try:
             text = _ocr_image(Image.open(BytesIO(data)), strict=True)

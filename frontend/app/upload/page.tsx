@@ -6,9 +6,12 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { getSource, upload } from "@/lib/api";
 import { useEntities } from "@/lib/useEntities";
 
-const MAX_BYTES = 20 * 1024 * 1024; // CONTRACT.md: 413 above 20 MB
-const ACCEPT = ".jpg,.jpeg,.png,.webp,.tif,.tiff,.pdf,.txt,.md,.csv"; // same list as the backend
-const ALLOWED = /\.(jpe?g|png|webp|tiff?|pdf|txt|md|csv)$/i;
+const MB = 1024 * 1024;
+// Same limits as the backend: decks and reports carry their photos, a .zip is a whole folder
+const LIMIT = (name: string) => (/\.zip$/i.test(name) ? 100 * MB : /\.(pptx|docx)$/i.test(name) ? 50 * MB : 20 * MB);
+const ACCEPT = ".jpg,.jpeg,.png,.webp,.tif,.tiff,.pdf,.txt,.md,.csv,.pptx,.docx,.zip"; // same list as the backend
+const ALLOWED = /\.(jpe?g|png|webp|tiff?|pdf|txt|md|csv|pptx|docx|zip)$/i;
+const CREDIT_KEY = "kg-upload-credit";
 const POLL_MS = 2000;
 const MAX_POLLS = 90; // ~3 minutes
 
@@ -47,8 +50,8 @@ const PHASE_STYLE: Record<Phase, string> = {
 };
 
 function precheck(f: File): string | null {
-  if (!ALLOWED.test(f.name)) return "Only photos, PDFs, text notes and CSV files are accepted.";
-  if (f.size > MAX_BYTES) return `This file is ${(f.size / 1024 / 1024).toFixed(1)} MB; the limit is 20 MB.`;
+  if (!ALLOWED.test(f.name)) return "Accepted: photos, PDFs, text notes, CSVs, PowerPoint decks, Word reports and .zip folders.";
+  if (f.size > LIMIT(f.name)) return `This file is ${(f.size / MB).toFixed(1)} MB; the limit is ${LIMIT(f.name) / MB} MB.`;
   if (f.size === 0) return "This file is empty.";
   return null;
 }
@@ -76,6 +79,25 @@ function UploadView() {
   const monument = entitiesState.kind === "ready" ? entitiesState.entities.find((e) => e.id === monumentId) : undefined;
   const inputRef = useRef<HTMLInputElement>(null);
   const alive = useRef(true);
+  // Who documented this: credited on every file and fact that comes from the upload
+  const [contributor, setContributor] = useState("");
+  const [cohort, setCohort] = useState("");
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CREDIT_KEY) ?? "{}");
+      if (saved.contributor) setContributor(saved.contributor);
+      if (saved.cohort) setCohort(saved.cohort);
+    } catch {
+      /* nothing saved */
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(CREDIT_KEY, JSON.stringify({ contributor, cohort }));
+    } catch {
+      /* private mode */
+    }
+  }, [contributor, cohort]);
 
   useEffect(() => {
     document.title = "Upload · KathaGraph";
@@ -109,7 +131,22 @@ function UploadView() {
     patch(item.key, { phase: "uploading", progress: 0, message: undefined });
     try {
       // One request per file, so each row gets its own progress bar and its own error.
-      const res = await upload([item.file], (pct) => patch(item.key, { progress: pct }));
+      const res = await upload([item.file], (pct) => patch(item.key, { progress: pct }), { contributor, cohort });
+      if (/\.zip$/i.test(item.file.name)) {
+        // A folder: many files, each processed on its own; summarise instead of tracking each
+        const fresh = res.sources.filter((s) => s.status !== "duplicate");
+        const dup = res.sources.length - fresh.length;
+        const skipped = res.skipped?.length ?? 0;
+        return patch(item.key, {
+          phase: fresh.length ? "done" : "duplicate",
+          progress: 100,
+          message: [
+            `${fresh.length} file${fresh.length === 1 ? "" : "s"} from this folder added and queued for reading`,
+            dup ? `${dup} already in the archive` : null,
+            skipped ? `${skipped} skipped (unsupported type)` : null,
+          ].filter(Boolean).join(" · "),
+        });
+      }
       const src = res.sources[0];
       if (!src) throw new Error("The server didn't return the new file.");
       if (src.status === "duplicate") {
@@ -171,8 +208,9 @@ function UploadView() {
       )}
       <h1 className="font-display text-4xl sm:text-5xl">Add new material to the archive</h1>
       <p className="mt-2 max-w-xl text-[17px] text-dust">
-        Photos, scanned documents in English or Hindi, and field notes. KathaGraph reads the GPS and text, then links
-        each file to its monument.
+        Photos, scanned documents, field notes, slide decks and Word reports in English, Hindi or Gujarati, or a whole
+        fieldwork folder as a .zip. KathaGraph reads the GPS and text, pulls the photos out of decks and reports, and
+        links each file to its monument.
       </p>
 
       <div className="mt-6 rounded-sm border border-ochre/40 bg-ochre-soft/50 p-4">
@@ -203,6 +241,32 @@ function UploadView() {
         </label>
       </div>
 
+      <fieldset className="mt-6 grid gap-3 sm:grid-cols-2">
+        <legend className="mb-1 text-[15px] text-ink">
+          Credit <span className="text-dust">(optional, shown on every file and fact from this upload)</span>
+        </legend>
+        <label className="text-[14px] text-dust">
+          Your name
+          <input
+            value={contributor}
+            onChange={(e) => setContributor(e.target.value)}
+            maxLength={80}
+            placeholder="e.g. Asha Patel"
+            className="mt-1 block w-full rounded-md border border-line bg-paper px-3 py-2 text-[16px] text-ink"
+          />
+        </label>
+        <label className="text-[14px] text-dust">
+          Programme or cohort
+          <input
+            value={cohort}
+            onChange={(e) => setCohort(e.target.value)}
+            maxLength={80}
+            placeholder="e.g. Explorer Fellowship 2024"
+            className="mt-1 block w-full rounded-md border border-line bg-paper px-3 py-2 text-[16px] text-ink"
+          />
+        </label>
+      </fieldset>
+
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -218,7 +282,9 @@ function UploadView() {
         <p className="font-serif text-xl">
           {!confirmed ? "Tick the box above to start" : dragging ? "Drop to upload" : "Drag files here"}
         </p>
-        <p className="mt-1 text-[15px] text-dust">JPG, PNG, PDF, TXT or CSV, up to 20 MB each</p>
+        <p className="mt-1 text-[15px] text-dust">
+          Photos, PDF, TXT, CSV (20 MB) · PowerPoint, Word (50 MB) · a .zip folder (100 MB)
+        </p>
         <button
           type="button"
           disabled={!confirmed}

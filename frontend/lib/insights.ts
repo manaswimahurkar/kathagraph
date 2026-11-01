@@ -14,7 +14,7 @@ export const MONUMENT_CHECKLIST: { required_item: string; label: string }[] = [
 ];
 
 /** Field notes and photos are the team's own records; scans and CSVs are copies of other documents. */
-const FIELD_RECORD_TYPES: SourceType[] = ["note", "photo"];
+const FIELD_RECORD_TYPES: SourceType[] = ["note", "photo", "slides", "doc"];
 
 const live = (claims: Claim[]) => claims.filter((c) => c.status !== "rejected");
 

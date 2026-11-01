@@ -1,17 +1,19 @@
 import hashlib
 import logging
+import mimetypes
 import os
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import embeddings
+from . import embeddings, office
 from .db import get_conn
 from .ask import router as ask_router
 from .entities import router as entities_router
 from .insights import router as insights_router
+from .merge import router as merge_router
 from .pipeline import embed_chunks, process_source, rechunk_source
 from .storage import StorageError, upload_bytes
 
@@ -31,6 +33,7 @@ app.add_middleware(
 app.include_router(entities_router)
 app.include_router(ask_router)
 app.include_router(insights_router)
+app.include_router(merge_router)
 
 
 @app.on_event("startup")
@@ -56,9 +59,20 @@ KINDS = {
     ".pdf": "pdf",
     ".txt": "note", ".md": "note",
     ".csv": "csv",
+    ".pptx": "slides", ".docx": "doc",
 }
+CONTAINER = ".zip"  # a folder: unpacked into the files above
+BIG_KINDS = {"slides", "doc"}
+MAX_BIG_BYTES = 50 * 1024 * 1024  # decks and reports carry their photos
+MAX_ZIP_BYTES = 100 * 1024 * 1024
 SOURCE_FIELDS = ("id, filename, type, status, error, lat, lng, captured_at, file_url, tag, description, created_at, "
-                 "origin, author, licence, source_url")
+                 "origin, author, licence, source_url, parent_source_id")
+
+
+def credit(contributor: str | None, cohort: str | None) -> str | None:
+    """'Asha Patel · Explorer Fellowship 2024' from the optional upload fields."""
+    parts = [p.strip()[:80] for p in (contributor, cohort) if p and p.strip()]
+    return " · ".join(parts) or None
 
 
 @app.get("/")
@@ -80,27 +94,56 @@ def health():
 
 
 @app.post("/upload", status_code=202)
-async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...)):
-    """Accept files, store them, and queue each one for processing."""
+async def upload(
+    background: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+    contributor: str | None = Form(None),
+    cohort: str | None = Form(None),
+):
+    """Accept files (photos, PDFs, notes, CSVs, slide decks, Word reports, or a .zip folder of them),
+    store them, and queue each one for processing. `contributor` and `cohort` credit whoever documented them."""
     if not files:
         raise HTTPException(400, "No files were sent.")
     if len(files) > MAX_FILES_PER_UPLOAD:
-        raise HTTPException(400, f"Upload at most {MAX_FILES_PER_UPLOAD} files at a time.")
+        raise HTTPException(400, f"Upload at most {MAX_FILES_PER_UPLOAD} files at a time, or put them in a .zip folder.")
+    author = credit(contributor, cohort)
 
     # Validate everything first, so a bad file doesn't leave a half-finished upload
-    batch = []
+    batch, skipped = [], []
     for f in files:
         name = f.filename or "unnamed"
-        kind = KINDS.get(Path(name).suffix.lower())
-        if kind is None:
-            allowed = ", ".join(sorted(KINDS))
-            raise HTTPException(400, f"'{name}' is not a supported file type. Allowed: {allowed}")
+        suffix = Path(name).suffix.lower()
         data = await f.read()
         if not data:
             raise HTTPException(400, f"'{name}' is empty.")
-        if len(data) > MAX_FILE_BYTES:
-            raise HTTPException(413, f"'{name}' is larger than 20 MB.")
+        if suffix == CONTAINER:
+            if len(data) > MAX_ZIP_BYTES:
+                raise HTTPException(413, f"'{name}' is larger than 100 MB. Split the folder into smaller parts.")
+            try:
+                inner, left_out = office.expand_zip(data, tuple(KINDS))
+            except office.OfficeError as e:
+                raise HTTPException(400, f"'{name}': {e}")
+            skipped += left_out
+            for inner_name, inner_data in inner:
+                kind = KINDS[Path(inner_name).suffix.lower()]
+                limit = MAX_BIG_BYTES if kind in BIG_KINDS else MAX_FILE_BYTES
+                if inner_data and len(inner_data) <= limit:
+                    batch.append((inner_name, kind, inner_data, mimetypes.guess_type(inner_name)[0]))
+                else:
+                    skipped.append(inner_name)
+            continue
+        kind = KINDS.get(suffix)
+        if kind is None:
+            allowed = ", ".join(sorted([*KINDS, CONTAINER]))
+            raise HTTPException(400, f"'{name}' is not a supported file type. Allowed: {allowed}")
+        limit = MAX_BIG_BYTES if kind in BIG_KINDS else MAX_FILE_BYTES
+        if len(data) > limit:
+            raise HTTPException(413, f"'{name}' is larger than {limit // (1024 * 1024)} MB.")
         batch.append((name, kind, data, f.content_type))
+    if not batch:
+        raise HTTPException(400, "Nothing in that upload is a file type the archive can read.")
+    if len(batch) > office.MAX_ZIP_FILES:
+        raise HTTPException(400, f"Upload at most {office.MAX_ZIP_FILES} files at a time.")
 
     created = []
     seen_in_batch: dict[str, int] = {}
@@ -119,8 +162,8 @@ async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...
             continue
         with get_conn() as conn:
             row = conn.execute(
-                "insert into sources (type, filename, content_hash) values (%s, %s, %s) returning id",
-                (kind, name, digest),
+                "insert into sources (type, filename, content_hash, author) values (%s, %s, %s, %s) returning id",
+                (kind, name, digest, author),
             ).fetchone()
         source_id = row["id"]
         seen_in_batch[digest] = source_id
@@ -137,7 +180,7 @@ async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...
         background.add_task(process_source, source_id, data, kind)
         created.append({"id": source_id, "filename": name, "type": kind, "status": "pending"})
 
-    return JSONResponse({"sources": created}, status_code=202)
+    return JSONResponse({"sources": created, "skipped": skipped}, status_code=202)
 
 
 @app.get("/sources")

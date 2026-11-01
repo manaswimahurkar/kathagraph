@@ -131,3 +131,17 @@ alter table sources add column if not exists entity_id bigint references entitie
 alter table claims drop constraint if exists claims_method_check;
 alter table claims add constraint claims_method_check
   check (method in ('ocr', 'llm', 'exif', 'manual', 'import'));
+
+-- Slide decks, Word reports, embedded photos, and "Same place?" decisions (v1.0)
+alter table sources drop constraint if exists sources_type_check;
+alter table sources add constraint sources_type_check
+  check (type in ('photo', 'pdf', 'note', 'csv', 'web', 'slides', 'doc'));
+alter table sources add column if not exists parent_source_id bigint references sources(id) on delete cascade;
+create table if not exists entity_not_same (
+  a bigint not null references entities(id) on delete cascade,
+  b bigint not null references entities(id) on delete cascade,
+  decided_at timestamptz not null default now(),
+  primary key (a, b),
+  check (a < b)
+);
+alter table entity_not_same enable row level security;

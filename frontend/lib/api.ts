@@ -6,6 +6,7 @@
 
 import type {
   AskResponse,
+  DuplicatesResponse,
   InscriptionReading,
   ReviewResponse,
   TimelineResponse,
@@ -168,6 +169,29 @@ export function readInscription(file: File): Promise<InscriptionReading> {
   return request("/inscription/read", { method: "POST", body: form }, false);
 }
 
+/** GET /duplicates: pairs of monuments that may be the same place. */
+export function getDuplicates(): Promise<DuplicatesResponse> {
+  return USE_MOCK ? Promise.reject(new ApiError(NEEDS_LIVE)) : request("/duplicates");
+}
+
+/** POST /entities/{keep}/merge: fold `duplicateId` into `keepId`. */
+export function mergeMonuments(keepId: number, duplicateId: number): Promise<{ kept: { id: number; name: string } }> {
+  return request(`/entities/${keepId}/merge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ duplicate_id: duplicateId }),
+  });
+}
+
+/** POST /duplicates/dismiss: these two are different places; don't suggest them again. */
+export function markDifferent(a: number, b: number): Promise<unknown> {
+  return request("/duplicates/dismiss", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ a, b }),
+  });
+}
+
 export function getPriorities(): Promise<PrioritiesResponse> {
   return USE_MOCK ? viaMock(() => mock.getPriorities()) : request("/priorities");
 }
@@ -180,7 +204,11 @@ export function getSource(id: number): Promise<SourceDetail> {
  * POST /upload with multipart field "files".
  * Uses XMLHttpRequest because fetch can't report upload progress. onProgress gets 0–100.
  */
-export function upload(files: File[], onProgress?: (pct: number) => void): Promise<UploadResponse> {
+export function upload(
+  files: File[],
+  onProgress?: (pct: number) => void,
+  credit?: { contributor?: string; cohort?: string },
+): Promise<UploadResponse> {
   if (USE_MOCK) {
     let pct = 0;
     const tick = setInterval(() => onProgress?.((pct = Math.min(90, pct + 18))), 100);
@@ -209,7 +237,7 @@ export function upload(files: File[], onProgress?: (pct: number) => void): Promi
         return;
       }
       const detail = body && "detail" in body && typeof body.detail === "string" ? body.detail : null;
-      const fallback = xhr.status === 413 ? "File is larger than 20 MB." : `Upload failed (${xhr.status}).`;
+      const fallback = xhr.status === 413 ? "File is too large." : `Upload failed (${xhr.status}).`;
       reject(new ApiError(detail ?? fallback, xhr.status));
     };
     xhr.onerror = () => reject(new ApiError(OFFLINE));
@@ -217,6 +245,8 @@ export function upload(files: File[], onProgress?: (pct: number) => void): Promi
 
     const form = new FormData();
     for (const f of files) form.append("files", f);
+    if (credit?.contributor?.trim()) form.append("contributor", credit.contributor.trim());
+    if (credit?.cohort?.trim()) form.append("cohort", credit.cohort.trim());
     xhr.send(form);
   });
 }
