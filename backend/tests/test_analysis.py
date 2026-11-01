@@ -194,3 +194,10 @@ def test_garbled_or_impossible_dates_are_not_read():
     assert year_range("2400rd century") is None
     assert year_range("2400") is None
     assert year_range("5th century BCE") == (-500, -401)
+
+
+def test_century_ranges():
+    from app.analysis import year_range
+    assert year_range("15th-16th centuries") == (1401, 1600)
+    assert year_range("12th to 13th century") == (1101, 1300)
+    assert year_range("3rd-2nd century BCE") == (-300, -101)

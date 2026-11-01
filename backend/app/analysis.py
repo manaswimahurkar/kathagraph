@@ -120,7 +120,13 @@ def _year_range(value: str) -> tuple[int, int] | None:
         return (-hi, -lo) if bce else (lo, hi)
     if re.search(r"\d{3,}(?:st|nd|rd|th)\b", v):
         return None  # "2400rd century": garbled, can't be read safely
-    m = re.search(_ORDINAL + r"\s*century", v)
+    # "15th-16th centuries", "15th to 16th century"
+    m = re.search(r"(?<!\d)(\d{1,2})(?:st|nd|rd|th)?\s*(?:-|to|and)\s*(\d{1,2})(?:st|nd|rd|th)\s*centur(?:y|ies)", v)
+    if m:
+        a, b = sorted((int(m.group(1)), int(m.group(2))))
+        lo, hi = (a - 1) * 100 + 1, b * 100
+        return (-hi, -lo) if bce else (lo, hi)
+    m = re.search(_ORDINAL + r"\s*centur(?:y|ies)", v)
     if m:
         n = int(m.group(1))
         lo, hi = (n - 1) * 100 + 1, n * 100
