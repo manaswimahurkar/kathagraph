@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import KnowledgeGraph from "@/components/KnowledgeGraph";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import Model3D from "@/components/Model3D";
@@ -124,6 +125,7 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
           <JumpLink href="#disagreements" tone={entity.conflicts.length ? "ochre" : undefined}>
             {entity.conflicts.length} {entity.conflicts.length === 1 ? "disagreement" : "disagreements"}
           </JumpLink>
+          <JumpLink href="#graph">Evidence graph</JumpLink>
           <JumpLink href="#missing">{entity.gaps.length} missing</JumpLink>
           {entity.lat != null && <JumpLink href="#visit">Walk through</JumpLink>}
           <JumpLink href="#sources">{entity.sources.length} sources</JumpLink>
@@ -136,6 +138,19 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
       <FieldOnly entity={entity} citation={citation} />
       <KnownFacts claims={entity.claims} citation={citation} disputed={disputed} fresh={fresh} onChanged={onChanged} />
       <Disagreements entity={entity} citation={citation} />
+      <Section
+        id="graph"
+        title="How the evidence connects"
+        intro="Every fact about this monument, linked to the sources that state it. Red links mark where sources disagree."
+        action="Hover a source to see what it says; click a fact to read the exact quotes."
+      >
+        <KnowledgeGraph entity={entity} />
+        <p className="mt-3 text-[15px]">
+          <Link href={`/ask?monument=${entity.id}`} className="font-medium text-water underline underline-offset-2">
+            Ask a question about {entity.name}
+          </Link>
+        </p>
+      </Section>
       <MissingDocs entity={entity} />
       {entity.lat != null && entity.lng != null && (
         <Section

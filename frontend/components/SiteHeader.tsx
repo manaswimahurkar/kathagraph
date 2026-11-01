@@ -2,13 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import { USE_MOCK } from "@/lib/api";
 import { usePrefs } from "@/lib/prefs";
 
 const NAV: { href: string; label: string; short?: string }[] = [
   { href: "/", label: "Map" },
   { href: "/search", label: "Search" },
+  { href: "/ask", label: "Ask" },
+  { href: "/timeline", label: "Timeline" },
   { href: "/next", label: "Field visits", short: "Visits" },
+  { href: "/field", label: "I'm here", short: "Here" },
+  { href: "/inscription", label: "Inscriptions", short: "Read" },
+  { href: "/review", label: "Review" },
   { href: "/upload", label: "Upload" },
 ];
 
@@ -25,6 +31,12 @@ export function StepsMark({ className = "" }: { className?: string }) {
 export default function SiteHeader() {
   const pathname = usePathname();
   const { theme, setTheme } = usePrefs();
+  // On a phone, keep the current page's link in view in the sideways-scrolling row.
+  useEffect(() => {
+    document
+      .querySelector('nav[aria-label="Main"] [aria-current="page"]')
+      ?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [pathname]);
   return (
     <header className="sticky top-0 z-[1000] bg-paper/85 backdrop-blur supports-[backdrop-filter]:bg-paper/75">
       {USE_MOCK && (
@@ -40,7 +52,11 @@ export default function SiteHeader() {
             कथा
           </span>
         </Link>
-        <nav aria-label="Main">
+        {/* Nine links don't fit on a phone: the row scrolls sideways there, with a fade hinting at more. */}
+        <nav
+          aria-label="Main"
+          className="min-w-0 overflow-x-auto [mask-image:linear-gradient(to_right,black_85%,transparent)] [scrollbar-width:none] lg:[mask-image:none] [&::-webkit-scrollbar]:hidden"
+        >
           <ul className="flex items-center text-[14px] sm:gap-1 sm:text-[15px]">
             {NAV.map((n) => {
               const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);

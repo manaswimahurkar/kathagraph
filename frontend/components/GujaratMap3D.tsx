@@ -20,6 +20,14 @@ import { CountChips } from "./CountChips";
 import { Structure } from "./Structures";
 import { categoryOf } from "@/lib/structures";
 
+/** Documentation health: how complete a monument's record is (0-100). */
+function healthColor(score?: number | null): string {
+  if (score == null) return "#f3d27a";
+  if (score < 40) return "#e0735a";
+  if (score < 70) return "#e8a33c";
+  return "#7cc4a4";
+}
+
 export type MapView =
   | { kind: "home" }
   | { kind: "monument"; id: number }
@@ -281,7 +289,7 @@ function Markers({
         const [x, z] = project(e.lng, e.lat);
         const y = heightAt(e.lng, e.lat) + 0.02;
         const on = selected === e.id;
-        const color = e.n_conflicts > 0 ? "#e8a33c" : "#f3d27a";
+        const color = healthColor(e.completeness);
         return (
           <group
             key={e.id}
@@ -825,6 +833,11 @@ export default function GujaratMap3D({
                 ◌
               </span>
             )}
+            <span
+              title={`Documentation ${e.completeness ?? "?"}% complete`}
+              className="mr-1.5 inline-block size-2 rounded-full align-middle"
+              style={{ background: healthColor(e.completeness) }}
+            />
             {e.name}
             {e.n_conflicts > 0 && <span className="ml-1.5 text-[#e8a33c]">◆</span>}
           </button>
@@ -871,6 +884,16 @@ export default function GujaratMap3D({
           </div>
           <StyleSwitcher current={base} onChange={setBase} status={status} />
         </>
+      )}
+
+      {interactive && (
+        // bottom left, above the credits: the top of the map sits under the site header
+        <div className="pointer-events-none absolute bottom-8 left-3 hidden rounded bg-[#1f160e]/85 px-3 py-2 text-[12px] text-[#f6e7c8] sm:block">
+          <p className="mb-1 font-medium">Documentation health</p>
+          <p><span className="mr-1.5 inline-block size-2 rounded-full bg-[#7cc4a4]" />Well documented (70%+)</p>
+          <p><span className="mr-1.5 inline-block size-2 rounded-full bg-[#e8a33c]" />Partly (40–69%)</p>
+          <p><span className="mr-1.5 inline-block size-2 rounded-full bg-[#e0735a]" />Needs fieldwork (under 40%)</p>
+        </div>
       )}
 
       {source && (
