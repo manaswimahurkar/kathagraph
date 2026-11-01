@@ -224,7 +224,8 @@ def ask(body: AskIn):
         "not_recorded": out.get("not_recorded") or [],
         "citations": [
             {
-                "n": i, "chunk_id": p["chunk_id"], "excerpt": p["text"][:EXCERPT],
+                "n": i, "chunk_id": p["chunk_id"],
+                "excerpt": re.sub(r"\s+", " ", re.sub(r"={2,}", " ", p["text"]))[:EXCERPT].strip(),
                 "used": i in used,
                 "source": {
                     "id": p["source_id"], "filename": p["filename"], "type": p["type"], "page": p["page"],

@@ -196,3 +196,6 @@ All of these are live; the shapes above are unchanged, only extra fields were ad
   503 without a Gemini key, 502 if Gemini fails.
 - `completeness` (0–100) on `/entities`, `/entities/{id}` and `/priorities` rows: checklist coverage plus the archive's own field record.
 - Gujarati: OCR reads Gujarati (`guj+hin+eng`); `language` can be `"gu"`; Gujarati names match their Hindi/English spellings.
+- `GET /review?limit=30` → `{ totals: {unverified, verified, rejected, in_queue}, claims: [{ id, entity: {id, name}, field, field_label, value, quote, method, confidence, risk, reasons: [string], excerpt, source: {id, filename, origin, file_url, source_url} }] }`, riskiest first. Verify/reject with `PATCH /claims/{id}`.
+- `GET /timeline` → `{ monuments: [{ id, name, category, dynasty, span: [startYear, endYear], verified, disputed, variants: [{ value, span, sources, verified }] }], undated: [{ id, name, category, dynasty }] }`. Years BCE are negative.
+- `POST /inscription/read` (multipart `file`: jpg/png/webp ≤ 15 MB) → `{ is_inscription, script, language, legibility, transcription, transliteration, translation_en, dates: [{ as_written, calendar, year, common_era: [lo, hi] | null }], names, uncertain, notice }`. Nothing is stored.
