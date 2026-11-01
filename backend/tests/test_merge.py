@@ -25,3 +25,13 @@ def test_far_apart_places_are_never_suggested():
 
 def test_unrelated_names_are_not_suggested():
     assert compare(_e(1, "Lothal"), _e(2, "Dholavira")) is None
+
+
+def test_names_sharing_only_a_common_ending_are_not_suggested():
+    assert compare(_e(1, "Somnath Temple"), _e(2, "Neminath temple")) is None
+    assert compare(_e(1, "Shantinath temple"), _e(2, "Parshvanath temple")) is None
+
+
+def test_different_structures_at_one_site_are_not_suggested():
+    assert compare(_e(1, "Uparkot Caves", 21.52, 70.47), _e(2, "Uparkot Fort", 21.522, 70.471)) is None
+    assert compare(_e(1, "Narayan Sarovar"), _e(2, "Temples at Narayan Sarovar")) is None

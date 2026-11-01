@@ -16,34 +16,40 @@ from .db import get_conn
 
 router = APIRouter()
 
-NAME_RATIO = 0.75
+NAME_RATIO = 0.85
 NEAR_KM = 0.3
 FAR_KM = 5.0
 
 
+def _core(key: str) -> str:
+    """The distinctive part of a name key: 'somnath mandir' -> 'somnath'."""
+    return " ".join(w for w in key.split() if w not in matching.GENERIC_WORDS)
+
+
 def compare(a: dict, b: dict) -> tuple[float, list[str]] | None:
     """How likely two monuments are the same place, with the reasons. None = clearly different."""
+    ca, cb = models3d.category_for(a["name"]), models3d.category_for(b["name"])
+    if ca != cb and "site" not in (ca, cb):
+        return None  # a cave and a fort at the same hill are two structures, not one
     both_exact = all(x["lat"] is not None and x.get("coord_precision") != "approximate" for x in (a, b))
     km = matching.distance_km(a["lat"], a["lng"], b["lat"], b["lng"]) if both_exact else None
     if km is not None and km > FAR_KM:
         return None
-    ratio = max((SequenceMatcher(None, ka, kb).ratio() for ka in a["keys"] for kb in b["keys"]), default=0)
-    contains = any(
-        matching.core_words(ka) and matching.core_words(kb)
-        and (set(ka.split()) <= set(kb.split()) or set(kb.split()) <= set(ka.split()))
-        for ka in a["keys"] for kb in b["keys"]
-    )
+    # Compare the distinctive words only: "Somnath Temple" and "Neminath temple" share just "-nath temple"
+    cores = [(x, y) for x in {_core(k) for k in a["keys"]} for y in {_core(k) for k in b["keys"]} if x and y]
+    ratio = max((SequenceMatcher(None, x, y).ratio() for x, y in cores), default=0)
+    contains = any(set(x.split()) <= set(y.split()) or set(y.split()) <= set(x.split()) for x, y in cores)
     reasons, score = [], 0.0
     if ratio >= NAME_RATIO:
         score += ratio
-        reasons.append(f"Names are {round(ratio * 100)}% alike")
-    if contains:
+        reasons.append("Same name" if ratio == 1 else f"Names are {round(ratio * 100)}% alike")
+    elif contains:
         score += 0.6
         reasons.append("One name contains the other")
     if km is not None and km <= NEAR_KM:
         score += 0.5
         reasons.append(f"Pinned {round(km * 1000)} m apart")
-    if not reasons or (score < 0.75 and not contains):
+    if not reasons or score < 0.6:
         return None
     return round(score, 2), reasons
 
