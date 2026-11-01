@@ -50,6 +50,9 @@ def _entity_detail(conn, entity_id: int) -> dict | None:
         }
         for r in rows
     ]
+    groups = analysis.value_groups(claims)
+    for c in claims:
+        c["group"] = groups.get(c["id"], c["value"])
     sources = conn.execute(
         """select s.id, s.filename, s.type, es.tag, s.file_url, s.lat, s.lng, s.description, s.status,
                   s.origin, s.author, s.licence, s.source_url

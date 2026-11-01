@@ -176,3 +176,14 @@ def test_completeness_counts_checklist_and_own_field_record():
     assert completeness(6, 0, [{"origin": "web"}]) == 86
     assert completeness(6, 6, []) == 0
     assert completeness(6, 3, [{"origin": "web"}, {"origin": "field"}]) == 57
+
+
+def test_value_groups_merge_spellings_and_scripts():
+    from app.analysis import value_groups
+    claims = [_claim(1, "builder", "Rudabai"), _claim(2, "builder", "रुडाबाई"), _claim(3, "builder", "Queen Rudabai"),
+              _claim(4, "builder", "Veer Singh"), _claim(5, "built_date", "1498"), _claim(6, "built_date", "1499"),
+              _claim(7, "builder", "Rudabai")]
+    g = value_groups(claims)
+    assert g[1] == g[2] == g[3] == g[7] == "Rudabai"
+    assert g[4] == "Veer Singh"
+    assert g[5] != g[6]

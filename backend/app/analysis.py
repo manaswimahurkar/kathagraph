@@ -151,6 +151,30 @@ def _same(a: str, b: str) -> bool:
     return _same_name(a, b)
 
 
+def value_groups(claims: list[dict]) -> dict[int, str]:
+    """For every claim, the label of the group of values that say the same thing
+    ("Rudabai", "Queen Rudabai" and "रुडाबाई" -> "Rudabai"), so views can draw one fact, not three.
+    The label is the most-cited spelling, preferring Latin script."""
+    out: dict[int, str] = {}
+    for field in {c["field"] for c in claims}:
+        buckets: list[list[dict]] = []
+        for c in (c for c in claims if c["field"] == field):
+            for b in buckets:
+                if all(_agree(field, c["value"], k["value"]) for k in b):
+                    b.append(c)
+                    break
+            else:
+                buckets.append([c])
+        for b in buckets:
+            counts: dict[str, int] = {}
+            for c in b:
+                counts[c["value"]] = counts.get(c["value"], 0) + 1
+            label = max(counts, key=lambda v: (counts[v], v.isascii(), -len(v)))
+            for c in b:
+                out[c["id"]] = label
+    return out
+
+
 def conflicts(claims: list[dict]) -> list[dict]:
     """Same field, clearly different values, from different statements."""
     out = []

@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from . import embeddings, gemini
+from .text_extract import detect_language
 from .db import get_conn
 from .entities import FIELD_LABELS, _entity_detail
 
@@ -146,6 +147,17 @@ def _record_text(d: dict, cite_of: dict[int, int]) -> str:
     return "\n".join(lines)
 
 
+LANGUAGE_RULE = {
+    "gu": "The question is in Gujarati: answer in Gujarati, written in Gujarati script (ગુજરાતી), never in Devanagari.",
+    "hi": "The question is in Hindi: answer in Hindi, written in Devanagari script.",
+    "en": "The question is in English: answer in English.",
+}
+
+
+def language_rule(question: str) -> str:
+    return LANGUAGE_RULE.get(detect_language(question), "Answer in the language of the question.")
+
+
 def _label(p: dict) -> str:
     if p["origin"] == "web":
         kind = "published reference"
@@ -161,9 +173,18 @@ def _label(p: dict) -> str:
 
 
 def clean_citations(answer: str, listed: list, n_passages: int) -> tuple[str, list[int]]:
-    """Drop citation marks that point at no passage; return the cleaned answer and the passages used."""
+    """Expand grouped marks ("[1, 2]" -> "[1][2]"), drop marks that point at no passage,
+    and return the cleaned text with the passages it uses."""
     valid = set(range(1, n_passages + 1))
-    text = re.sub(r"\s?\[(\d+)\]", lambda m: m.group(0) if int(m.group(1)) in valid else "", answer or "")
+
+    def expand(m: re.Match) -> str:
+        nums = [int(n) for n in re.findall(r"\d+", m.group(1)) if int(n) in valid]
+        if not nums:
+            return ""  # every number was invalid: drop the mark and the space before it
+        lead = " " if m.group(0)[0].isspace() else ""
+        return lead + "".join(f"[{n}]" for n in dict.fromkeys(nums))
+
+    text = re.sub(r"\s?\[(\d+(?:\s*[,;]\s*\d+)*)\]", expand, answer or "")
     used = {int(n) for n in re.findall(r"\[(\d+)\]", text)}
     used |= {n for n in (listed or []) if isinstance(n, int) and n in valid}
     return text.strip(), sorted(used)
@@ -188,7 +209,7 @@ def ask(body: AskIn):
         cite_of.setdefault(p["source_id"], i)
     context = "\n\n".join(f"[{i}] {_label(p)}\n{p['text'][:2000]}" for i, p in enumerate(passages, 1))
     records = "\n\n".join(_record_text(d, cite_of) for d in monuments)
-    prompt = f"{INSTRUCTIONS}\nQUESTION: {question}\n\nPASSAGES:\n{context or '(none)'}\n\nMONUMENT RECORDS:\n{records or '(none)'}"
+    prompt = f"{INSTRUCTIONS}\n{language_rule(question)}\nQUESTION: {question}\n\nPASSAGES:\n{context or '(none)'}\n\nMONUMENT RECORDS:\n{records or '(none)'}"
     try:
         out = gemini.generate_json([{"text": prompt}], ANSWER_SCHEMA, temperature=0.1)
     except gemini.GeminiError as e:
@@ -199,7 +220,7 @@ def ask(body: AskIn):
         "question": question,
         "answer": answer,
         "confidence": out.get("confidence") or "low",
-        "disagreements": out.get("disagreements") or [],
+        "disagreements": [clean_citations(d, [], len(passages))[0] for d in out.get("disagreements") or []],
         "not_recorded": out.get("not_recorded") or [],
         "citations": [
             {

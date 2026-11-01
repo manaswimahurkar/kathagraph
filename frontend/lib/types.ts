@@ -74,6 +74,8 @@ export interface EntitySummary {
   category?: string | null;
   /** Optional: "approximate" when the pin is the location of a larger complex the site belongs to. */
   coord_precision?: "exact" | "approximate" | null;
+  /** Documentation health, 0-100 (backend v0.9+): checklist coverage plus the archive's own field record. */
+  completeness?: number | null;
 }
 export interface EntitiesResponse {
   entities: EntitySummary[];
@@ -94,6 +96,8 @@ export interface Claim {
   status: ClaimStatus;
   source: { id: number; filename: string; page: number | null };
   evidence_text: string | null;
+  /** Backend v0.9+: label shared by values that say the same thing ("Rudabai" / "रुडाबाई"). */
+  group?: string;
   /**
    * Optional, not yet in CONTRACT.md: true when the backend has checked that this fact
    * is rarely documented elsewhere. The page also works without it.
@@ -162,6 +166,8 @@ export interface EntityDetail {
   coord_precision?: "exact" | "approximate" | null;
   /** Optional: 3D models stored for this monument. */
   models?: EntityModel[];
+  /** Documentation health, 0-100 (backend v0.9+). */
+  completeness?: number | null;
 }
 
 /** GET /priorities — the archive as a to-do list for the next field visit. Already sorted: most work first. */
@@ -179,11 +185,44 @@ export interface PriorityMonument {
   n_sources: number;
   n_gaps: number;
   n_conflicts: number;
+  completeness?: number | null;
   todo: PriorityTodo[];
 }
 export interface PrioritiesResponse {
   totals: { monuments: number; missing_items: number; disagreements: number };
   monuments: PriorityMonument[];
+}
+
+/** POST /ask: an answer written only from the archive's records, with numbered citations. */
+export interface AskCitation {
+  n: number;
+  chunk_id: number;
+  excerpt: string;
+  /** true if the answer actually cites this passage */
+  used: boolean;
+  source: {
+    id: number;
+    filename: string;
+    type: SourceType;
+    page: number | null;
+    file_url?: string | null;
+    origin?: "web" | "field" | null;
+    author?: string | null;
+    licence?: string | null;
+    source_url?: string | null;
+  };
+}
+export interface AskResponse {
+  question: string;
+  /** null when the archive holds nothing on the question (see `message`) */
+  answer: string | null;
+  confidence: "high" | "medium" | "low";
+  disagreements: string[];
+  not_recorded: string[];
+  citations: AskCitation[];
+  monuments: { id: number; name: string; n_conflicts: number; n_gaps: number }[];
+  mode?: "semantic" | "keyword";
+  message?: string;
 }
 
 /** PATCH /claims/{id} */

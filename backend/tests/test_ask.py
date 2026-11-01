@@ -29,3 +29,16 @@ def test_record_marks_verified_rejected_and_disagreements():
     assert "1498 (source: a.txt)" in text
     assert "Veer Singh" not in text
     assert "SOURCES DISAGREE" in text and "NOT YET DOCUMENTED: Interior" in text
+
+
+def test_grouped_citations_are_expanded():
+    text, used = clean_citations("Built by Rudabai [1, 2, 9]. Year 1499 [3;4].", [], n_passages=4)
+    assert text == "Built by Rudabai [1][2]. Year 1499 [3][4]."
+    assert used == [1, 2, 3, 4]
+
+
+def test_answer_language_follows_the_question_script():
+    from app.ask import language_rule
+    assert "Gujarati script" in language_rule("અડાલજની વાવ કોણે બંધાવી?")
+    assert "Devanagari" in language_rule("अडालज की वाव किसने बनवाई?")
+    assert "English" in language_rule("Who built the Adalaj stepwell?")

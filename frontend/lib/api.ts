@@ -5,6 +5,7 @@
 //   https://your-api.onrender  -> the real backend
 
 import type {
+  AskResponse,
   ClaimStatus,
   ClaimStatusResponse,
   EntitiesResponse,
@@ -128,6 +129,20 @@ export function addModel(entityId: number, input: { sketchfabUrl: string; sketch
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sketchfab_url: input.sketchfabUrl }),
   });
+}
+
+/** POST /ask: a question answered only from the archive's records. Answers can take 10-20 s. */
+export function ask(question: string, entityId?: number): Promise<AskResponse> {
+  if (USE_MOCK) return Promise.reject(new ApiError("Ask the archive needs the live backend (set NEXT_PUBLIC_API_URL)."));
+  return request(
+    "/ask",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, entity_id: entityId ?? null }),
+    },
+    false, // no retry, and the longer timeout: writing an answer takes a while
+  );
 }
 
 export function getPriorities(): Promise<PrioritiesResponse> {
