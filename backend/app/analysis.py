@@ -29,9 +29,14 @@ _SIGNS = {"ा": "a", "ि": "i", "ी": "i", "ु": "u", "ू": "u", "े": "e"
 _DIGITS = {chr(0x0966 + i): str(i) for i in range(10)}
 
 
+def gujarati_to_devanagari(text: str) -> str:
+    """Gujarati letters sit at the same positions as Devanagari, 0x180 higher: \u0aaa (પ) -> \u092a (प)."""
+    return "".join(chr(ord(c) - 0x180) if "\u0a80" <= c <= "\u0aff" else c for c in text)
+
+
 def to_latin(text: str) -> str:
     out = []
-    chars = list(text)
+    chars = list(gujarati_to_devanagari(text))
     for i, c in enumerate(chars):
         nxt = chars[i + 1] if i + 1 < len(chars) else ""
         if c in _CONSONANTS:

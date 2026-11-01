@@ -161,3 +161,18 @@ def test_regnal_names_and_honorifics():
     assert len(conflicts(different)) == 1
     other_king = [_claim(1, "builder", "Bhima I"), _claim(2, "builder", "Karna I")]
     assert len(conflicts(other_king)) == 1
+
+
+def test_gujarati_names_compare_with_hindi_and_english():
+    from app.analysis import conflicts, to_latin
+    assert to_latin("રૂડાબાઈ") == "rudabai"
+    claims = [_claim(1, "builder", "Rudabai"), _claim(2, "builder", "રૂડાબાઈ"), _claim(3, "builder", "रुडाबाई")]
+    assert conflicts(claims) == []
+
+
+def test_completeness_counts_checklist_and_own_field_record():
+    from app.entities import completeness
+    assert completeness(6, 0, [{"origin": "field"}]) == 100
+    assert completeness(6, 0, [{"origin": "web"}]) == 86
+    assert completeness(6, 6, []) == 0
+    assert completeness(6, 3, [{"origin": "web"}, {"origin": "field"}]) == 57

@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from . import embeddings
 from .db import get_conn
+from .ask import router as ask_router
 from .entities import router as entities_router
 from .pipeline import embed_chunks, process_source, rechunk_source
 from .storage import StorageError, upload_bytes
@@ -27,6 +28,7 @@ app.add_middleware(
 )
 
 app.include_router(entities_router)
+app.include_router(ask_router)
 
 
 @app.on_event("startup")

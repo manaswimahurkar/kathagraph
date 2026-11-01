@@ -40,9 +40,14 @@ MATCH_RATIO = 0.85
 GPS_RADIUS_KM = 2.0
 
 
+def _deva(text: str) -> str:
+    """Gujarati script -> Devanagari (same letter positions, 0x180 apart), so both scripts match."""
+    return "".join(chr(ord(c) - 0x180) if "\u0a80" <= c <= "\u0aff" else c for c in text)
+
+
 def name_key(name: str) -> str:
     """'Adalaj ni Vav' and 'Adalaj Stepwell' -> 'adalaj vav'."""
-    words = re.findall(r"[a-z\u0900-\u097f]+", name.lower())
+    words = re.findall(r"[a-z\u0900-\u097f]+", _deva(name.lower()))
     words = [SYNONYMS.get(w, w) for w in words if w not in CONNECTORS and len(w) > 1]
     return " ".join(dict.fromkeys(words))  # drop repeats, keep order
 

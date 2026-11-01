@@ -60,15 +60,26 @@ def _entity_detail(conn, entity_id: int) -> dict | None:
     checklist = conn.execute(
         "select required_item, label from checklist_items where entity_type = %s order by id", (ent["type"],)
     ).fetchall()
+    gap_list = analysis.gaps(checklist, claims, sources, ent["lat"] is not None)
     return {
         **ent,
+        "completeness": completeness(len(checklist), len(gap_list), sources),
         "aliases": aliases,
         "claims": claims,
         "conflicts": analysis.conflicts(claims),
-        "gaps": analysis.gaps(checklist, claims, sources, ent["lat"] is not None),
+        "gaps": gap_list,
         "sources": sources,
         "models": models,
     }
+
+
+def completeness(n_checklist: int, n_gaps: int, sources: list[dict]) -> int:
+    """Documentation health, 0-100: share of the checklist covered, plus the archive's own field
+    record (a photo or note from a site visit, not only published material) as one more item."""
+    has_field = any(s.get("origin") == "field" for s in sources)
+    total = n_checklist + 1
+    covered = (n_checklist - n_gaps) + (1 if has_field else 0)
+    return round(100 * covered / total) if total else 0
 
 
 def _all_details(conn, etype: str | None) -> list[dict]:
@@ -103,10 +114,13 @@ def _all_details(conn, etype: str | None) -> list[dict]:
     out = []
     for e in ents:
         claims, sources = claims_by[e["id"]], sources_by[e["id"]]
+        checklist = checklists.get(e["type"], [])
+        gap_list = analysis.gaps(checklist, claims, sources, e["lat"] is not None)
         out.append({
             **e, "claims": claims, "sources": sources,
             "conflicts": analysis.conflicts(claims),
-            "gaps": analysis.gaps(checklists.get(e["type"], []), claims, sources, e["lat"] is not None),
+            "gaps": gap_list,
+            "completeness": completeness(len(checklist), len(gap_list), sources),
         })
     return out
 
@@ -122,6 +136,7 @@ def list_entities(type: str | None = None):
             "coord_precision": d["coord_precision"] or ("exact" if d["lat"] is not None else None),
             "n_sources": len(d["sources"]), "n_claims": len(d["claims"]),
             "n_conflicts": len(d["conflicts"]), "n_gaps": len(d["gaps"]),
+            "completeness": d["completeness"],
         }
         for d in details
     ]}
@@ -177,6 +192,7 @@ def priorities(limit: int = 100):
         {
             "id": d["id"], "name": d["name"], "lat": d["lat"], "lng": d["lng"],
             "n_sources": len(d["sources"]), "n_gaps": len(d["gaps"]), "n_conflicts": len(d["conflicts"]),
+            "completeness": d["completeness"],
             "todo": build_todo(d),
         }
         for d in details

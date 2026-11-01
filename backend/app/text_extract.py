@@ -17,7 +17,7 @@ from PIL import Image, ImageOps
 
 log = logging.getLogger("kathagraph.text")
 
-OCR_LANGS = "hin+eng"
+OCR_LANGS = "guj+hin+eng"  # Gujarati, Hindi, English: the languages of Gujarat's records
 MAX_OCR_SIDE = 2000          # downscale big photos: faster, little accuracy loss
 MAX_PDF_PAGES = 30
 MIN_CONFIDENCE = 60          # per-word Tesseract confidence (0-100)
@@ -32,7 +32,7 @@ _langs_cache: str | None = None
 
 
 def _ocr_langs(pytesseract) -> str:
-    """Use Hindi + English when the Hindi pack is installed, else English only."""
+    """Every wanted language whose Tesseract pack is installed (English at least)."""
     global _langs_cache
     if _langs_cache is None:
         try:
@@ -154,12 +154,15 @@ def extract(kind: str, data: bytes) -> Extracted:
 
 
 def detect_language(text: str) -> str:
-    """'hi' if mostly Devanagari, 'en' if mostly Latin, else 'mixed'."""
+    """'gu' if mostly Gujarati script, 'hi' if mostly Devanagari, 'en' if mostly Latin, else 'mixed'."""
+    guj = sum(1 for c in text if "\u0a80" <= c <= "\u0aff")
     deva = sum(1 for c in text if "\u0900" <= c <= "\u097f")
     latin = sum(1 for c in text if c.isascii() and c.isalpha())
-    total = deva + latin
+    total = guj + deva + latin
     if total == 0:
         return "unknown"
+    if guj / total > 0.7:
+        return "gu"
     if deva / total > 0.7:
         return "hi"
     if latin / total > 0.7:

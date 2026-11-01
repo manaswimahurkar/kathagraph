@@ -81,3 +81,8 @@ def test_stitch_rebuilds_text_cut_by_the_old_chunker():
     for seed in range(100):
         text, _ = _sample_text(seed)
         assert stitch(_old_chunker(text)) == text.strip()
+
+
+def test_detects_gujarati():
+    assert detect_language("અડાલજની વાવ ગાંધીનગર જિલ્લામાં છે") == "gu"
+    assert detect_language("अडालज की वाव") == "hi"

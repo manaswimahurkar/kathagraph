@@ -185,3 +185,14 @@ All of these are live; the shapes above are unchanged, only extra fields were ad
   Wikidata facts (`built_date`, `builder`, `architectural_style`, `material`, `heritage_status`) stored as source `wikidata_Q….txt` (CC0) with one quoted line per fact, `method: "import"`;
   coordinates when the monument has none; the item's main photo from Wikimedia Commons as a `photo` source with `origin: "web"`, `author`, `licence`, `source_url` (free licences only).
 - `/priorities` todo: new items `own_photo` ("Only a published photo so far: take our own photographs") and `field_record` ("No field record yet, only published references: write field notes on site").
+
+## Added Sun 1 Nov (backend v0.9)
+
+- `POST /ask` `{ "question": "...", "entity_id": 12 | null }` → answer from the archive's own records only:
+  `{ question, answer, confidence: "high"|"medium"|"low", disagreements: [string], not_recorded: [string],
+     citations: [{ n, chunk_id, excerpt, used, source: { id, filename, type, page, file_url, origin, author, licence, source_url } }],
+     monuments: [{ id, name, n_conflicts, n_gaps }], mode: "semantic"|"keyword", message? }`.
+  The answer cites passages as `[n]` (only numbers that exist); `answer` is null with a `message` when the archive has nothing.
+  503 without a Gemini key, 502 if Gemini fails.
+- `completeness` (0–100) on `/entities`, `/entities/{id}` and `/priorities` rows: checklist coverage plus the archive's own field record.
+- Gujarati: OCR reads Gujarati (`guj+hin+eng`); `language` can be `"gu"`; Gujarati names match their Hindi/English spellings.

@@ -53,3 +53,7 @@ def test_generic_names_are_not_a_monument_of_their_own(name):
 def test_named_monuments_are_not_generic(name):
     from app.matching import is_generic
     assert not is_generic(name)
+
+
+def test_gujarati_script_matches_hindi_and_english_names():
+    assert keys_match(name_key("અડાલજની વાવ"), name_key("अडालज की वाव"))
