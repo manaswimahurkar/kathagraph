@@ -34,6 +34,14 @@ def risk(claim: dict, disputed: bool, corroborating_sources: int) -> tuple[int, 
     elif not claim.get("quote"):
         score += 1
         why.append("No supporting quote")
+    if claim.get("field") == "built_date":
+        span = analysis.year_range(claim.get("value") or "")
+        if span is None:
+            score += 2
+            why.append("Date can't be read")
+        elif span[0] >= 1950:
+            score += 2
+            why.append("Very recent for a heritage site: may be a listing or restoration year")
     if claim.get("method") == "ocr":
         score += 1
         why.append("Read by OCR")

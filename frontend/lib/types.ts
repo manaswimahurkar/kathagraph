@@ -225,6 +225,63 @@ export interface AskResponse {
   message?: string;
 }
 
+/** GET /review: unverified AI facts, riskiest first. */
+export interface ReviewClaim {
+  id: number;
+  entity: { id: number; name: string };
+  field: string;
+  field_label: string;
+  value: string;
+  quote: string | null;
+  method: ClaimMethod;
+  confidence: number | null;
+  risk: number;
+  reasons: string[];
+  excerpt: string;
+  source: { id: number; filename: string; origin?: "web" | "field" | null; file_url?: string | null; source_url?: string | null };
+}
+export interface ReviewResponse {
+  totals: { unverified: number; verified: number; rejected: number; in_queue: number };
+  claims: ReviewClaim[];
+}
+
+/** GET /timeline. Years BCE are negative. */
+export interface TimelineVariant {
+  value: string;
+  span: [number, number] | null;
+  sources: string[];
+  verified: boolean;
+}
+export interface TimelineMonument {
+  id: number;
+  name: string;
+  category: string;
+  dynasty: string | null;
+  span: [number, number];
+  verified: boolean;
+  disputed: boolean;
+  variants: TimelineVariant[];
+}
+export interface TimelineResponse {
+  monuments: TimelineMonument[];
+  undated: { id: number; name: string; category: string; dynasty: string | null }[];
+}
+
+/** POST /inscription/read: an AI reading, never stored. */
+export interface InscriptionReading {
+  is_inscription: boolean;
+  script: string;
+  language: string;
+  legibility: "good" | "partial" | "poor";
+  transcription: string;
+  transliteration?: string;
+  translation_en: string;
+  dates: { as_written: string; calendar: string; year?: number | null; common_era: [number, number] | null }[];
+  names: string[];
+  uncertain: string[];
+  notice: string;
+}
+
 /** PATCH /claims/{id} */
 export interface ClaimStatusResponse {
   id: number;

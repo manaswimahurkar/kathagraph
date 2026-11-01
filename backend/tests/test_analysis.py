@@ -187,3 +187,10 @@ def test_value_groups_merge_spellings_and_scripts():
     assert g[1] == g[2] == g[3] == g[7] == "Rudabai"
     assert g[4] == "Veer Singh"
     assert g[5] != g[6]
+
+
+def test_garbled_or_impossible_dates_are_not_read():
+    from app.analysis import year_range
+    assert year_range("2400rd century") is None
+    assert year_range("2400") is None
+    assert year_range("5th century BCE") == (-500, -401)

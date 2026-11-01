@@ -31,3 +31,12 @@ def test_excerpt_centres_on_the_quote():
     text = "x" * 500 + " Queen Rudabai had it built " + "y" * 500
     out = _around(text, "Queen Rudabai")
     assert "Queen Rudabai" in out and out.startswith("…") and out.endswith("…")
+
+
+def test_recent_or_unreadable_dates_rank_higher():
+    base = {"quote": "x", "chunk_text": "x", "method": "llm", "confidence": 0.9, "field": "built_date"}
+    recent, why = risk({**base, "value": "2021"}, disputed=False, corroborating_sources=1)
+    old, _ = risk({**base, "value": "1063"}, disputed=False, corroborating_sources=1)
+    garbled, why2 = risk({**base, "value": "2400rd century"}, disputed=False, corroborating_sources=1)
+    assert recent > old and garbled > old
+    assert any("recent" in w for w in why) and "Date can't be read" in why2

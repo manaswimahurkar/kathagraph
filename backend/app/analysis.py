@@ -72,7 +72,7 @@ def normalise(field: str, value: str) -> str:
 
 ROMAN = {"i", "ii", "iii", "iv", "v", "vi", "vii", "viii"}
 _HONORIFIC_SUFFIX = re.compile(r"(deva|dev)$")
-_ORDINAL = r"(\d{1,2})(?:st|nd|rd|th)"
+_ORDINAL = r"(?<!\d)(\d{1,2})(?:st|nd|rd|th)"
 
 
 def _name_parts(key: str) -> tuple[list[str], str]:
@@ -95,7 +95,17 @@ def _same_name(a: str, b: str) -> bool:
     return bool(ra) and (ra == rb or SequenceMatcher(None, ra, rb).ratio() >= 0.85)
 
 
+LATEST_YEAR = 2100  # anything later is a misreading, not a date
+
+
 def year_range(value: str) -> tuple[int, int] | None:
+    span = _year_range(value)
+    if span and (span[1] > LATEST_YEAR or span[0] < -10000):
+        return None
+    return span
+
+
+def _year_range(value: str) -> tuple[int, int] | None:
     """The span of years a date statement allows, at its own precision:
     '1026' -> (1026, 1026); '1026-1027' -> (1026, 1027); '1060s' -> (1060, 1069);
     '11th century' -> (1001, 1100); '2400 BCE' -> (-2400, -2400); 'VS 1555' -> (1498, 1499)."""
@@ -108,6 +118,8 @@ def year_range(value: str) -> tuple[int, int] | None:
         n = int(m.group(1))
         lo, hi = (n - 1) * 1000 + 1, n * 1000
         return (-hi, -lo) if bce else (lo, hi)
+    if re.search(r"\d{3,}(?:st|nd|rd|th)\b", v):
+        return None  # "2400rd century": garbled, can't be read safely
     m = re.search(_ORDINAL + r"\s*century", v)
     if m:
         n = int(m.group(1))

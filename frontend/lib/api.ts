@@ -6,6 +6,9 @@
 
 import type {
   AskResponse,
+  InscriptionReading,
+  ReviewResponse,
+  TimelineResponse,
   ClaimStatus,
   ClaimStatusResponse,
   EntitiesResponse,
@@ -143,6 +146,26 @@ export function ask(question: string, entityId?: number): Promise<AskResponse> {
     },
     false, // no retry, and the longer timeout: writing an answer takes a while
   );
+}
+
+const NEEDS_LIVE = "This feature needs the live backend (set NEXT_PUBLIC_API_URL).";
+
+/** GET /review: unverified AI facts, riskiest first. */
+export function getReview(limit = 30): Promise<ReviewResponse> {
+  return USE_MOCK ? Promise.reject(new ApiError(NEEDS_LIVE)) : request(`/review?limit=${limit}`);
+}
+
+/** GET /timeline: every dated monument with its date range. */
+export function getTimeline(): Promise<TimelineResponse> {
+  return USE_MOCK ? Promise.reject(new ApiError(NEEDS_LIVE)) : request("/timeline");
+}
+
+/** POST /inscription/read: an AI reading of an inscription photo. Takes 10-30 s. */
+export function readInscription(file: File): Promise<InscriptionReading> {
+  if (USE_MOCK) return Promise.reject(new ApiError(NEEDS_LIVE));
+  const form = new FormData();
+  form.append("file", file);
+  return request("/inscription/read", { method: "POST", body: form }, false);
 }
 
 export function getPriorities(): Promise<PrioritiesResponse> {
