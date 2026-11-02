@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import SearchBar from "@/components/SearchBar";
+import TimeSlider, { TimeTravelButton } from "@/components/TimeSlider";
 import { useEntities } from "@/lib/useEntities";
 
 // The home page is the 3D map of Gujarat itself (drawn by WorldBackground in the layout).
@@ -18,6 +19,7 @@ export default function HomePage() {
       <div className="kg-panel kg-rise-1 w-full max-w-md p-3">
         <h1 className="sr-only">KathaGraph: what do we actually know about each monument?</h1>
         <SearchBar />
+        {state.kind === "ready" && entities.length > 0 && <TimeTravelButton />}
         <p className="mt-2 px-1 text-[13px] text-dust">
           {state.kind === "loading" && "Placing monuments on the map…"}
           {state.kind === "ready" &&
@@ -61,6 +63,7 @@ export default function HomePage() {
           </details>
         )}
       </div>
+      <TimeSlider entities={entities} />
     </div>
   );
 }

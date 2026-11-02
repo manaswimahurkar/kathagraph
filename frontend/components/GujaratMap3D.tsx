@@ -19,6 +19,7 @@ import { fieldLabel, type EntityDetail, type EntitySummary } from "@/lib/types";
 import { CountChips } from "./CountChips";
 import { Structure } from "./Structures";
 import { categoryOf } from "@/lib/structures";
+import { getTimeTravel, stateAt, useTimeTravelActive, useTimelineData, type Dated } from "@/lib/timeTravel";
 
 /** Documentation health: how complete a monument's record is (0-100). */
 function healthColor(score?: number | null): string {
@@ -267,20 +268,60 @@ function Markers({
   heightAt,
   selected,
   onPick,
+  dated,
+  timeVis,
 }: {
   points: Located[];
   heightAt: (lon: number, lat: number) => number;
   selected: number | null;
   onPick?: (id: number) => void;
+  /** When travelling in time: each monument's dates. null = show everything as it is today. */
+  dated: Map<number, Dated> | null;
+  /** Written every frame: how visible each monument is (0..1), so its label can hide too. */
+  timeVis: React.RefObject<Map<number, number>>;
 }) {
   const rings = useRef<THREE.Mesh[]>([]);
-  useFrame(({ clock }) => {
+  const groups = useRef<(THREE.Group | null)[]>([]);
+  const builds = useRef<(THREE.Group | null)[]>([]);
+  const beams = useRef<(THREE.Mesh | null)[]>([]);
+  const now = useRef(new Map<number, { rise: number; alpha: number }>());
+  useFrame(({ clock }, dt) => {
     const t = clock.elapsedTime;
-    rings.current.forEach((m, i) => {
-      if (!m) return;
-      const s = 1 + ((t * 0.6 + i * 0.37) % 1) * 2.2;
-      m.scale.setScalar(s);
-      (m.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - ((t * 0.6 + i * 0.37) % 1));
+    const year = getTimeTravel().year;
+    const k = 1 - Math.exp(-Math.min(dt, 0.1) * 6);
+    points.forEach((e, i) => {
+      // Time travel: a monument rises when its date passes, and flickers while sources disagree.
+      const want = dated ? stateAt(dated.get(e.id), year) : { rise: 1, alpha: 1, flicker: false };
+      const c = now.current.get(e.id) ?? { rise: 1, alpha: 1 };
+      c.rise += (want.rise - c.rise) * k;
+      c.alpha += (want.alpha - c.alpha) * k;
+      now.current.set(e.id, c);
+      const flick = want.flicker ? 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 4.5 + e.id)) : 1;
+      const a = c.alpha * flick;
+      timeVis.current?.set(e.id, a);
+
+      const g = groups.current[i];
+      if (g) g.visible = c.alpha > 0.02;
+      const b = builds.current[i];
+      if (b) {
+        const base = selected === e.id ? 1.7 : 1.25;
+        b.scale.set(base, base * Math.max(0.02, c.rise), base);
+        b.traverse((o) => {
+          const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+          if (!m || !("opacity" in m)) return;
+          m.transparent = a < 0.99;
+          m.opacity = a;
+          m.depthWrite = a > 0.9;
+        });
+      }
+      const beam = beams.current[i];
+      if (beam) (beam.material as THREE.MeshBasicMaterial).opacity = (selected === e.id ? 0.85 : 0.6) * c.alpha;
+      const m = rings.current[i];
+      if (m) {
+        const s = 1 + ((t * 0.6 + i * 0.37) % 1) * 2.2;
+        m.scale.setScalar(s);
+        (m.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - ((t * 0.6 + i * 0.37) % 1)) * c.alpha;
+      }
     });
   });
   return (
@@ -293,6 +334,7 @@ function Markers({
         return (
           <group
             key={e.id}
+            ref={(g) => void (groups.current[i] = g)}
             position={[x, y, z]}
             onClick={(ev) => {
               if (!onPick || ev.delta > 5) return; // ignore the end of a drag
@@ -300,10 +342,10 @@ function Markers({
               onPick(e.id);
             }}
           >
-            <group scale={on ? 1.7 : 1.25} rotation-y={(e.id * 1.7) % Math.PI}>
+            <group ref={(g) => void (builds.current[i] = g)} scale={on ? 1.7 : 1.25} rotation-y={(e.id * 1.7) % Math.PI}>
               <Structure kind={categoryOf(e.name, e.category)} highlight={on} />
             </group>
-            <mesh position={[0, on ? 3.4 : 2.6, 0]}>
+            <mesh ref={(m) => void (beams.current[i] = m)} position={[0, on ? 3.4 : 2.6, 0]}>
               <cylinderGeometry args={[0.03, on ? 0.12 : 0.08, on ? 3.6 : 2.6, 12, 1, true]} />
               <meshBasicMaterial color={color} transparent opacity={on ? 0.85 : 0.6} blending={THREE.AdditiveBlending} depthWrite={false} />
             </mesh>
@@ -598,7 +640,7 @@ interface Pin {
   el: HTMLElement | null;
 }
 
-function Projector({ pins }: { pins: React.RefObject<Pin[]> }) {
+function Projector({ pins, timeVis }: { pins: React.RefObject<Pin[]>; timeVis: React.RefObject<Map<number, number>> }) {
   const { camera, size } = useThree();
   const v = useMemo(() => new THREE.Vector3(), []);
   useFrame(() => {
@@ -612,7 +654,9 @@ function Projector({ pins }: { pins: React.RefObject<Pin[]> }) {
       // Monument labels must never cover each other: a clashing one (lower priority) is hidden
       // until zooming in makes room for it. The monument's 3D model stays visible.
       let clash = false;
-      if (p.key.startsWith("m-") && visible) {
+      // travelling in time: no label for a monument that isn't built yet
+      const unbuilt = p.key.startsWith("m-") && (timeVis.current?.get(Number(p.key.slice(2))) ?? 1) < 0.3;
+      if (p.key.startsWith("m-") && visible && !unbuilt) {
         const w = p.el.offsetWidth;
         clash = placed.some((q) => Math.abs(q.x - x) < (q.w + w) / 2 + 4 && Math.abs(q.y - y) < 28);
         if (!clash) placed.push({ x, y, w });
@@ -627,7 +671,7 @@ function Projector({ pins }: { pins: React.RefObject<Pin[]> }) {
         y = y - 44 - h < 110 ? y + h + 24 : y - 44;
       }
       p.el.style.transform = `translate(-50%, -100%) translate(${px}px, ${y}px)`;
-      const show = visible && !clash;
+      const show = visible && !clash && !unbuilt;
       p.el.style.opacity = show ? "" : "0";
       p.el.style.pointerEvents = show ? "" : "none";
     }
@@ -720,6 +764,12 @@ export default function GujaratMap3D({
   };
 
   const heightAt = terrain?.heightAt ?? (() => 0);
+
+  // Time travel (home page only): the slider sets a year, and monuments appear as they were built.
+  const timeActive = useTimeTravelActive() && interactive;
+  const timeline = useTimelineData(timeActive);
+  const dated = timeActive && timeline.kind === "ready" ? timeline.dated : null;
+  const timeVis = useRef(new Map<number, number>());
   const points = entities.filter((e): e is Located => e.lat != null && e.lng != null);
   const selected = view.kind === "monument" ? view.id : picked;
   const pickedEntity = points.find((e) => e.id === picked) ?? null;
@@ -784,9 +834,9 @@ export default function GujaratMap3D({
             tint={style.tint}
           />
         )}
-        <Markers points={points} heightAt={heightAt} selected={selected} onPick={interactive ? pick : undefined} />
+        <Markers points={points} heightAt={heightAt} selected={selected} onPick={interactive ? pick : undefined} dated={dated} timeVis={timeVis} />
         <CameraRig view={view} points={points} heightAt={heightAt} interactive={interactive} calm={calm} />
-        <Projector pins={pins} />
+        <Projector pins={pins} timeVis={timeVis} />
       </Canvas>
 
       {/* vignette: candle-lit in dark mode, a soft edge in light mode */}
@@ -882,11 +932,12 @@ export default function GujaratMap3D({
               Right-drag or W A S D to move · Q / E to turn
             </p>
           </div>
-          <StyleSwitcher current={base} onChange={setBase} status={status} />
+          {/* the time slider takes the bottom of the screen while travelling in time */}
+          {!timeActive && <StyleSwitcher current={base} onChange={setBase} status={status} />}
         </>
       )}
 
-      {interactive && (
+      {interactive && !timeActive && (
         // bottom left, above the credits: the top of the map sits under the site header
         <div className="pointer-events-none absolute bottom-8 left-3 hidden rounded bg-[#1f160e]/85 px-3 py-2 text-[12px] text-[#f6e7c8] sm:block">
           <p className="mb-1 font-medium">Documentation health</p>
