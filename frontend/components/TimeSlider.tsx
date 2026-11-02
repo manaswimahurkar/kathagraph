@@ -18,7 +18,7 @@ import {
 } from "@/lib/timeTravel";
 import type { EntitySummary } from "@/lib/types";
 
-const PLAY_SECONDS = 30; // the whole 4,500 years
+const PLAY_SECONDS = 30; // the whole 5,600 years
 
 /**
  * The time-travel bar along the bottom of the home map. Drag it (or press Play) and the 3D map
@@ -63,15 +63,17 @@ export default function TimeSlider({ entities }: { entities: EntitySummary[] }) 
   if (!tt.active) return null;
 
   const ready = tl.kind === "ready" ? tl : null;
-  const dated = ready ? [...ready.dated.entries()].filter(([id]) => onMap.has(id)) : [];
+  const all = ready ? [...ready.dated.entries()].filter(([id]) => onMap.has(id)) : [];
+  const dated = all.filter(([, d]) => !d.natural);
+  const naturalCount = all.length - dated.length;
   let stood = 0;
   let maybe = 0;
-  const recent: { id: number; hi: number }[] = [];
+  const recent: { id: number; hi: number; founded: boolean }[] = [];
   for (const [id, d] of dated) {
     const s = stateAt(d, tt.year);
     if (s.rise === 1) {
       stood++;
-      if (tt.year - d.hi < 60) recent.push({ id, hi: d.hi });
+      if (tt.year - d.hi < 60) recent.push({ id, hi: d.hi, founded: d.founded });
     } else if (s.rise > 0) maybe++;
   }
   recent.sort((a, b) => b.hi - a.hi);
@@ -97,24 +99,28 @@ export default function TimeSlider({ entities }: { entities: EntitySummary[] }) 
             <>
               <p>
                 By <b className="font-medium">{fmtYear(tt.year)}</b>: <b className="font-medium text-ochre">{stood}</b> of{" "}
-                {dated.length} dated monuments stood
+                {dated.length} dated sites stood
                 {maybe > 0 && (
                   <>
                     , and <b className="font-medium text-ochre">{maybe}</b> more may have (sources disagree or give a range)
                   </>
                 )}
                 .
+                {naturalCount > 0 && (
+                  <span className="text-dust"> {naturalCount} natural sites (mountains, islands, lakes) are shown throughout.</span>
+                )}
               </p>
               {recent.length > 0 && (
                 <p className="mt-0.5 truncate text-[13px] text-dust">
-                  Recently built:{" "}
+                  Recently built or founded:{" "}
                   {recent.slice(0, 3).map((r, i) => (
                     <span key={r.id}>
                       {i > 0 && ", "}
                       <Link href={`/monument/${r.id}`} className="text-ink underline-offset-2 hover:underline">
                         {names.get(r.id)}
                       </Link>{" "}
-                      ({fmtYear(r.hi)})
+                      ({r.founded ? "founded " : ""}
+                      {fmtYear(r.hi)})
                     </span>
                   ))}
                 </p>
@@ -184,7 +190,7 @@ export default function TimeSlider({ entities }: { entities: EntitySummary[] }) 
         />
       </div>
       <div className="flex justify-between text-[11.5px] text-dust tabular-nums">
-        {[-2500, -300, 500, 1000, 1300, 1600, 1900, 2030].map((y) => (
+        {[-3600, -300, 500, 1000, 1300, 1600, 1900, 2030].map((y) => (
           <span key={y} className={y === -300 || y === 1300 || y === 1900 ? "hidden sm:inline" : ""}>
             {fmtYear(y)}
           </span>
@@ -230,7 +236,7 @@ export function TimeTravelButton() {
     >
       <span>
         <span className="font-medium text-ink">Travel through time</span>
-        <span className="block text-[12.5px] text-dust">Watch Gujarat&apos;s monuments rise, from 2500 BCE to today</span>
+        <span className="block text-[12.5px] text-dust">Watch Gujarat&apos;s heritage appear, from 3600 BCE to today</span>
       </span>
       <span aria-hidden="true" className="text-ochre">
         ▶

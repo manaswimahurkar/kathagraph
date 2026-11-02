@@ -3,17 +3,17 @@
 import Link from "next/link";
 import KnowledgeGraph from "@/components/KnowledgeGraph";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import DigitalTwin from "@/components/DigitalTwin";
 import Model3D from "@/components/Model3D";
 import PhotoGallery from "@/components/PhotoGallery";
 import SiteWalkthrough from "@/components/SiteWalkthrough";
 import { EmptyState, ErrorState, Skeleton } from "@/components/States";
 import { ApiError, getEntity, setClaimStatus } from "@/lib/api";
-import { comparisonRows, corroborated, fieldOnly, MONUMENT_CHECKLIST, novelty, originOf, summarise, type Novelty } from "@/lib/insights";
+import { checklistFor, comparisonRows, corroborated, fieldOnly, novelty, originOf, summarise, type Novelty } from "@/lib/insights";
 import { CATEGORY_LABEL, categoryOf } from "@/lib/structures";
 import { modelsFor } from "@/lib/models";
-import { fieldLabel, tagLabel, type Claim, type ClaimStatus, type EntityDetail } from "@/lib/types";
+import { tagLabel, type Claim, type ClaimStatus, type EntityDetail, fieldLabelFor, type SiteNature } from "@/lib/types";
 
 type State =
   | { kind: "loading" }
@@ -84,6 +84,19 @@ export default function MonumentPage() {
 
 // ---------------------------------------------------------------------------
 
+// The kind of site (built, natural or settlement) changes some labels: a town is founded, not built.
+const NatureContext = createContext<SiteNature | null>(null);
+function useFieldLabel() {
+  const nature = useContext(NatureContext);
+  return (field: string) => fieldLabelFor(field, nature);
+}
+
+const NATURE_TAG: Record<SiteNature, string | null> = {
+  built: null,
+  natural: "Natural site: not built by people, so it has no construction date",
+  settlement: "Settlement: dated by when it was founded",
+};
+
 function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged: () => void }) {
   // Citation numbers [1], [2]… follow the order of the Sources list.
   const citation = new Map(entity.sources.map((s, i) => [s.id, i + 1]));
@@ -91,9 +104,10 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
 
   const curated = modelsFor(entity.name, entity.aliases.map((a) => a.alias));
   const fresh = novelty(entity);
-  const category = CATEGORY_LABEL[categoryOf(entity.name, entity.category)];
+  const category = CATEGORY_LABEL[categoryOf(entity.name, entity.category, entity.nature)];
 
   return (
+    <NatureContext.Provider value={entity.nature ?? null}>
     <article className="mt-5">
       <Model3D entityId={entity.id} name={entity.name} curated={curated} fromArchive={entity.models ?? []} />
       <header className="pb-8">
@@ -101,6 +115,11 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
           {category} · Record no. {String(entity.id).padStart(3, "0")}
         </p>
         <h1 className="mt-1 font-display text-[2.6rem] leading-[1.05] sm:text-6xl">{entity.name}</h1>
+        {entity.nature && NATURE_TAG[entity.nature] && (
+          <p className="mt-2 inline-block rounded-full border border-water/40 bg-water-soft/50 px-3 py-0.5 text-[13px] text-water">
+            {NATURE_TAG[entity.nature]}
+          </p>
+        )}
         {entity.aliases.length > 0 && (
           <p className="mt-2 text-[17px] text-dust">
             Also recorded as{" "}
@@ -177,6 +196,7 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
       <SourceList entity={entity} />
       <Contribute entity={entity} />
     </article>
+    </NatureContext.Provider>
   );
 }
 
@@ -325,6 +345,7 @@ function FactRow({
   novelty?: Novelty;
   onChanged: () => void;
 }) {
+  const fieldLabel = useFieldLabel();
   const [status, setStatus] = useState<ClaimStatus>(claim.status);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -431,6 +452,7 @@ function FactRow({
 const ANSWER_STYLE = ["bg-ochre-soft text-ochre", "bg-water-soft text-water", "bg-rust-soft text-rust", "bg-sand text-ink"];
 
 function Disagreements({ entity, citation }: { entity: EntityDetail; citation: Map<number, number> }) {
+  const fieldLabel = useFieldLabel();
   return (
     <Section
       id="disagreements"
@@ -536,8 +558,9 @@ function Disagreements({ entity, citation }: { entity: EntityDetail; citation: M
 function MissingDocs({ entity }: { entity: EntityDetail }) {
   const missing = new Set(entity.gaps.map((g) => g.required_item));
   // Items the backend reports that aren't in our standard list still show as missing.
-  const extra = entity.gaps.filter((g) => !MONUMENT_CHECKLIST.some((i) => i.required_item === g.required_item));
-  const items = [...MONUMENT_CHECKLIST, ...extra];
+  const checklist = checklistFor(entity.nature);
+  const extra = entity.gaps.filter((g) => !checklist.some((i) => i.required_item === g.required_item));
+  const items = [...checklist, ...extra];
   const done = items.filter((i) => !missing.has(i.required_item)).length;
   return (
     <Section
@@ -596,6 +619,7 @@ const TYPE_PLURAL: Record<string, [string, string]> = {
 };
 
 function AtAGlance({ entity }: { entity: EntityDetail }) {
+  const fieldLabel = useFieldLabel();
   const s = summarise(entity);
   const agree = corroborated(entity);
   const pct = s.facts ? Math.round((s.verified / s.facts) * 100) : 0;
@@ -657,6 +681,7 @@ function AtAGlance({ entity }: { entity: EntityDetail }) {
 // ---------- Lesser-known details ----------
 
 function FieldOnly({ entity, citation }: { entity: EntityDetail; citation: Map<number, number> }) {
+  const fieldLabel = useFieldLabel();
   const items = fieldOnly(entity);
   if (items.length === 0) return null;
   return (

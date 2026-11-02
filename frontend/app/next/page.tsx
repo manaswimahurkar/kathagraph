@@ -115,6 +115,11 @@ function MonumentCard({ rank, m }: { rank: number; m: PriorityMonument }) {
           <Link href={`/monument/${m.id}`} className="text-ink underline-offset-4 hover:text-water hover:underline">
             {m.name}
           </Link>
+          {m.nature && m.nature !== "built" && (
+            <span className="ml-2 rounded-full border border-water/40 px-2 py-0.5 align-middle font-sans text-[12px] text-water">
+              {m.nature === "natural" ? "Natural site" : "Settlement"}
+            </span>
+          )}
         </h2>
         <p className="text-[13px] text-dust">
           {plural(m.n_sources, "source", "sources")} in the archive
