@@ -29,6 +29,20 @@ export function StepsMark({ className = "" }: { className?: string }) {
   );
 }
 
+/** Logo: a domed jharokha (carved window) looking into a stepwell, its terraces stepping down to the water. */
+export function KathaMark({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 40 46" aria-hidden="true" className={className}>
+      <circle cx="20" cy="2.6" r="2" fill="#e3a84e" />
+      <path d="M20 5.2C26.5 5.2 31.5 9.4 32.6 15C35 15.2 36.6 17 36.6 19.4V45H3.4V19.4C3.4 17 5 15.2 7.4 15C8.5 9.4 13.5 5.2 20 5.2Z" fill="#e3a84e" />
+      <path d="M11 15.4C12.6 11.4 16 9.4 20 9.4C24 9.4 27.4 11.4 29 15.4" fill="none" stroke="#7a5216" strokeWidth="1.5" />
+      <rect x="7.6" y="20" width="24.8" height="25" fill="#2a1d12" />
+      <path d="M7.6 20H32.4V25H28.2V30H24.2V35H15.8V30H11.8V25H7.6Z" fill="#f3dfb8" />
+      <rect x="15.8" y="35" width="8.4" height="5" fill="#86c7bd" />
+    </svg>
+  );
+}
+
 export default function SiteHeader() {
   const pathname = usePathname();
   const { theme, setTheme } = usePrefs();
@@ -39,7 +53,7 @@ export default function SiteHeader() {
       ?.scrollIntoView({ inline: "center", block: "nearest" });
   }, [pathname]);
   return (
-    <header className="sticky top-0 z-[1000] bg-paper/85 backdrop-blur supports-[backdrop-filter]:bg-paper/75">
+    <header className="kg-lintel sticky top-0 z-[1000] backdrop-blur">
       {USE_MOCK && (
         <p className="bg-ochre-soft px-4 py-1.5 text-center text-[13px] text-ink">
           Showing demo data for three Gujarat stepwells. It is illustrative, not an archival record.
@@ -47,7 +61,7 @@ export default function SiteHeader() {
       )}
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:px-4">
         <Link href="/" className="flex shrink-0 items-center gap-2 text-ink sm:gap-2.5">
-          <StepsMark className="h-4 w-6 sm:h-5 sm:w-7" />
+          <KathaMark className="h-8 w-7 sm:h-10 sm:w-9" />
           <span className="kg-title font-display text-lg leading-none tracking-wide max-[400px]:hidden sm:text-[22px]">KathaGraph</span>
           <span lang="hi" className="hidden font-display text-base leading-none text-ochre sm:inline">
             कथा
@@ -70,7 +84,7 @@ export default function SiteHeader() {
                     href={n.href}
                     aria-current={active ? "page" : undefined}
                     className={`whitespace-nowrap rounded px-1.5 py-1.5 transition-colors sm:px-3 ${
-                      active ? "bg-ink text-paper" : "text-dust hover:bg-sand hover:text-ink"
+                      active ? "kg-tablet" : "text-dust hover:bg-sand hover:text-ink"
                     }`}
                   >
                     {n.short ? (

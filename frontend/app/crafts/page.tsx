@@ -147,7 +147,7 @@ function CraftRecord({ c }: { c: Craft }) {
         </div>
         {hero && (hero.author || hero.licence) && (
           <p className="absolute right-2 top-2 rounded bg-[#1c140d]/70 px-2 py-0.5 text-[11px] text-[#e9dcc4]">
-            Photo: {[hero.author, hero.licence].filter(Boolean).join(", ")}
+            Photo: {[hero.author, hero.licence?.replace(/\s*\(https?:[^)]*\)/, "")].filter(Boolean).join(", ")}
           </p>
         )}
       </div>
