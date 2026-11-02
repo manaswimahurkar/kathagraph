@@ -16,7 +16,13 @@ function useMats(highlight: boolean) {
   return useMemo(() => {
     const e = highlight ? new THREE.Color("#5a3a10") : new THREE.Color("#000000");
     const m = (c: string) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, metalness: 0, emissive: e });
-    return { stone: m(STONE), dark: m(STONE_DARK), roof: m(ROOF), water: new THREE.MeshStandardMaterial({ color: WATER, roughness: 0.3 }) };
+    return {
+      stone: m(STONE),
+      dark: m(STONE_DARK),
+      roof: m(ROOF),
+      water: new THREE.MeshStandardMaterial({ color: WATER, roughness: 0.3 }),
+      green: m("#5d7a3e"),
+    };
   }, [highlight]);
 }
 
@@ -123,6 +129,54 @@ export function Structure({ kind, highlight = false }: { kind: Category; highlig
           <mesh material={m.dark} position={[0, 0.05, 0]}><boxGeometry args={[0.8, 0.1, 0.6]} /></mesh>
           <mesh material={m.stone} position={[0, 0.22, 0]}><boxGeometry args={[0.66, 0.24, 0.46]} /></mesh>
           <mesh material={m.roof} position={[0, 0.42, 0]} rotation-y={Math.PI / 4}><coneGeometry args={[0.5, 0.2, 4]} /></mesh>
+        </group>
+      );
+    case "mountain":
+      // a rocky peak, with a small shrine on top as many sacred hills in Gujarat have
+      return (
+        <group>
+          <mesh material={m.dark} position={[0, 0.42, 0]}><coneGeometry args={[0.62, 0.86, 7]} /></mesh>
+          <mesh material={m.stone} position={[0.28, 0.24, 0.1]}><coneGeometry args={[0.36, 0.48, 6]} /></mesh>
+          <mesh material={m.roof} position={[0, 0.92, 0]}><boxGeometry args={[0.1, 0.1, 0.1]} /></mesh>
+        </group>
+      );
+    case "island":
+      return (
+        <group>
+          <mesh material={m.water} position={[0, 0.02, 0]}><cylinderGeometry args={[0.66, 0.66, 0.03, 28]} /></mesh>
+          <mesh material={m.stone} position={[0, 0.07, 0]} scale={[1, 0.35, 0.75]}><sphereGeometry args={[0.42, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2]} /></mesh>
+          <mesh material={m.roof} position={[0.08, 0.2, 0]}><coneGeometry args={[0.08, 0.2, 4]} /></mesh>
+        </group>
+      );
+    case "sacred_lake":
+      // water with stepped ghats on one side
+      return (
+        <group>
+          <mesh material={m.water} position={[0, 0.03, 0]}><cylinderGeometry args={[0.55, 0.58, 0.04, 28]} /></mesh>
+          {[0, 1, 2].map((i) => (
+            <mesh key={i} material={m.stone} position={[0, 0.03 + i * 0.04, -0.55 - i * 0.07]}><boxGeometry args={[0.7, 0.04, 0.08]} /></mesh>
+          ))}
+        </group>
+      );
+    case "grove":
+      return (
+        <group>
+          {[[-0.25, -0.1, 0.5], [0.2, -0.2, 0.62], [0.05, 0.25, 0.44], [-0.05, 0, 0.7]].map(([x, z, h], i) => (
+            <group key={i} position={[x, 0, z]}>
+              <mesh material={m.dark} position={[0, 0.07, 0]}><cylinderGeometry args={[0.025, 0.03, 0.14, 5]} /></mesh>
+              <mesh material={m.green} position={[0, 0.14 + h / 2, 0]}><coneGeometry args={[0.16, h, 7]} /></mesh>
+            </group>
+          ))}
+        </group>
+      );
+    case "town":
+      // a walled cluster of houses
+      return (
+        <group>
+          <mesh material={m.dark} position={[0, 0.05, 0]}><boxGeometry args={[1.0, 0.1, 0.8]} /></mesh>
+          {[[-0.28, -0.18, 0.22], [0.1, -0.2, 0.3], [0.32, 0.12, 0.2], [-0.12, 0.18, 0.26], [0.0, 0.0, 0.38]].map(([x, z, h], i) => (
+            <mesh key={i} material={i % 2 ? m.stone : m.roof} position={[x, 0.1 + h / 2, z]}><boxGeometry args={[0.22, h, 0.2]} /></mesh>
+          ))}
         </group>
       );
     default:

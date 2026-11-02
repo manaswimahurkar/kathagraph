@@ -76,6 +76,8 @@ export interface EntitySummary {
   category?: string | null;
   /** Optional: "approximate" when the pin is the location of a larger complex the site belongs to. */
   coord_precision?: "exact" | "approximate" | null;
+  /** Optional: built, natural or settlement. Treated as built when absent. */
+  nature?: SiteNature | null;
   /** Documentation health, 0-100 (backend v0.9+): checklist coverage plus the archive's own field record. */
   completeness?: number | null;
 }
@@ -166,6 +168,8 @@ export interface EntityDetail {
   /** Optional (see EntitySummary). */
   category?: string | null;
   coord_precision?: "exact" | "approximate" | null;
+  /** Optional: built, natural or settlement. Treated as built when absent. */
+  nature?: SiteNature | null;
   /** Optional: 3D models stored for this monument. */
   models?: EntityModel[];
   /** Documentation health, 0-100 (backend v0.9+). */
@@ -182,6 +186,7 @@ export interface PriorityTodo {
 export interface PriorityMonument {
   id: number;
   name: string;
+  nature?: SiteNature | null;
   lat: number | null;
   lng: number | null;
   n_sources: number;
@@ -258,6 +263,9 @@ export interface TimelineMonument {
   id: number;
   name: string;
   category: string;
+  nature?: SiteNature | null;
+  /** "founded" for settlements: the span is when it was founded or first settled. */
+  date_meaning?: "built" | "founded" | null;
   dynasty: string | null;
   span: [number, number];
   verified: boolean;
@@ -266,7 +274,9 @@ export interface TimelineMonument {
 }
 export interface TimelineResponse {
   monuments: TimelineMonument[];
-  undated: { id: number; name: string; category: string; dynasty: string | null }[];
+  undated: { id: number; name: string; category: string; dynasty: string | null; nature?: SiteNature | null; date_meaning?: "built" | "founded" | null }[];
+  /** Natural sites: no construction date, so they're neither dated nor "undated". */
+  natural?: { id: number; name: string; category: string; nature: SiteNature; lat: number | null; lng: number | null }[];
 }
 
 /** POST /inscription/read: an AI reading, never stored. */
@@ -332,6 +342,18 @@ const FIELD_LABELS: Record<string, string> = {
   heritage_status: "Heritage status",
   location: "Location",
 };
+
+/** What kind of site: something people built, a natural place, or a whole settlement or landscape. */
+export type SiteNature = "built" | "natural" | "settlement";
+
+/** The label for a fact's field, adjusted to the kind of site (a town is founded, not built). */
+export function fieldLabelFor(field: string, nature?: SiteNature | null): string {
+  if (nature === "settlement") {
+    if (field === "built_date") return "Date of founding";
+    if (field === "builder") return "Founder or culture";
+  }
+  return fieldLabel(field);
+}
 
 export function fieldLabel(field: string): string {
   return FIELD_LABELS[field] ?? field.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());

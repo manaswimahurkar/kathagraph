@@ -13,6 +13,26 @@ export const MONUMENT_CHECKLIST: { required_item: string; label: string }[] = [
   { required_item: "location", label: "Reliable GPS location" },
 ];
 
+/** What a complete record needs depends on the kind of site: a mountain has no builder, a town is founded. */
+export function checklistFor(nature?: string | null): { required_item: string; label: string }[] {
+  if (nature === "natural")
+    return [
+      { required_item: "exterior_photo", label: "Photograph of the site" },
+      { required_item: "location", label: "Reliable GPS location" },
+      { required_item: "heritage_status", label: "Protection status" },
+      { required_item: "associations", label: "Sacred or historical associations" },
+    ];
+  if (nature === "settlement")
+    return [
+      { required_item: "exterior_photo", label: "Exterior photograph" },
+      { required_item: "inscription", label: "Inscription photo or transcription" },
+      { required_item: "built_date", label: "Date of founding" },
+      { required_item: "builder", label: "Founder or culture" },
+      { required_item: "location", label: "Reliable GPS location" },
+    ];
+  return MONUMENT_CHECKLIST;
+}
+
 /** Field notes and photos are the team's own records; scans and CSVs are copies of other documents. */
 const FIELD_RECORD_TYPES: SourceType[] = ["note", "photo", "slides", "doc"];
 
@@ -52,14 +72,15 @@ export function summarise(e: EntityDetail): Summary {
   const sourceTypes: Partial<Record<SourceType, number>> = {};
   for (const s of e.sources) sourceTypes[s.type] = (sourceTypes[s.type] ?? 0) + 1;
   const missing = new Set(e.gaps.map((g) => g.required_item));
+  const checklist = checklistFor(e.nature);
   return {
     facts: e.claims.length,
     verified: e.claims.filter((c) => c.status === "verified").length,
     rejected: e.claims.filter((c) => c.status === "rejected").length,
     disputedFields: e.conflicts.length,
     sourceTypes,
-    checklistDone: MONUMENT_CHECKLIST.filter((i) => !missing.has(i.required_item)).length,
-    checklistTotal: MONUMENT_CHECKLIST.length,
+    checklistDone: checklist.filter((i) => !missing.has(i.required_item)).length,
+    checklistTotal: checklist.length,
   };
 }
 

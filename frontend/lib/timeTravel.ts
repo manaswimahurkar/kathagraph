@@ -61,6 +61,10 @@ export interface Dated {
   disputed: boolean; // sources give different dates
   verified: boolean; // a person has checked the date
   variants: { value: string; sources: string[] }[];
+  /** A settlement's date is when it was founded; a structure's is when it was built. */
+  founded: boolean;
+  /** A natural place (mountain, island…): there all along, so always shown. */
+  natural: boolean;
 }
 
 export type TimelineState =
@@ -88,7 +92,12 @@ export function useTimelineData(enabled: boolean): TimelineState {
             disputed: m.disputed,
             verified: m.verified,
             variants: m.variants.filter((v) => v.span).map((v) => ({ value: v.value, sources: v.sources })),
+            founded: m.date_meaning === "founded" || m.nature === "settlement",
+            natural: false,
           });
+        }
+        for (const n of data.natural ?? []) {
+          dated.set(n.id, { lo: YEAR_MIN, hi: YEAR_MIN, disputed: false, verified: true, variants: [], founded: false, natural: true });
         }
         setS({ kind: "ready", dated, undated: data.undated.map((u) => ({ id: u.id, name: u.name })), data });
       })
@@ -106,6 +115,7 @@ export function useTimelineData(enabled: boolean): TimelineState {
 /** What a monument looks like at a given year. rise: 0 (not built) to 1 (standing). */
 export function stateAt(d: Dated | undefined, year: number): { rise: number; alpha: number; flicker: boolean } {
   if (!d) return { rise: 0, alpha: 0, flicker: false }; // no date: hidden while travelling in time
+  if (d.natural) return { rise: 1, alpha: 1, flicker: false }; // a mountain or island was always there
   if (year >= d.hi) return { rise: 1, alpha: 1, flicker: false };
   if (year >= d.lo) return { rise: 0.75, alpha: 0.6, flicker: d.disputed }; // within its date range
   return { rise: 0, alpha: 0, flicker: false };
@@ -115,8 +125,8 @@ export function stateAt(d: Dated | undefined, year: number): { rise: number; alp
 // The slider's time scale: stretched where monuments are dense, squeezed where they're sparse.
 
 const KNOTS: [number, number][] = [
-  [-2500, 0],
-  [-300, 0.08],
+  [-3600, 0],
+  [-300, 0.09],
   [500, 0.2],
   [1000, 0.36],
   [1300, 0.52],
@@ -124,7 +134,7 @@ const KNOTS: [number, number][] = [
   [1900, 0.9],
   [2030, 1],
 ];
-export const YEAR_MIN = -2500;
+export const YEAR_MIN = -3600;
 export const YEAR_MAX = 2030;
 
 export function posOf(y: number): number {
@@ -149,7 +159,7 @@ export const fmtYear = (y: number) => (y < 0 ? `${-y} BCE` : `${y} CE`);
 
 /** Broad periods for orientation only; boundaries are approximate. */
 export const ERAS: [number, number, string][] = [
-  [-2600, -1900, "Harappan"],
+  [-3600, -1900, "Harappan"],
   [-320, 550, "Early historic"],
   [550, 780, "Maitraka"],
   [940, 1244, "Chaulukya (Solanki)"],

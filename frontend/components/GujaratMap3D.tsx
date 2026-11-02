@@ -15,7 +15,7 @@ import { getEntity } from "@/lib/api";
 import { imageryUVs, loadImagery, MAP_BASES, resolveStyle, type Imagery, type MapStyle } from "@/lib/mapStyles";
 import { usePrefs, type MapBase } from "@/lib/prefs";
 import { buildTerrain, type ElevationSource, type Terrain } from "@/lib/terrain";
-import { fieldLabel, type EntityDetail, type EntitySummary } from "@/lib/types";
+import { fieldLabelFor, type EntityDetail, type EntitySummary } from "@/lib/types";
 import { CountChips } from "./CountChips";
 import { Structure } from "./Structures";
 import { categoryOf } from "@/lib/structures";
@@ -343,7 +343,7 @@ function Markers({
             }}
           >
             <group ref={(g) => void (builds.current[i] = g)} scale={on ? 1.7 : 1.25} rotation-y={(e.id * 1.7) % Math.PI}>
-              <Structure kind={categoryOf(e.name, e.category)} highlight={on} />
+              <Structure kind={categoryOf(e.name, e.category, e.nature)} highlight={on} />
             </group>
             <mesh ref={(m) => void (beams.current[i] = m)} position={[0, on ? 3.4 : 2.6, 0]}>
               <cylinderGeometry args={[0.03, on ? 0.12 : 0.08, on ? 3.6 : 2.6, 12, 1, true]} />
@@ -1033,7 +1033,8 @@ function MonumentPopup({
   }, [entity.id]);
 
   // Headline facts: construction date and builder, showing every value when sources disagree.
-  const headline = ["built_date", "builder"].map((field) => {
+  // a natural place has no builder or construction date: show what matters for it instead
+  const headline = (entity.nature === "natural" ? ["heritage_status", "purpose"] : ["built_date", "builder"]).map((field) => {
     const values = [...new Set((detail?.claims ?? []).filter((c) => c.field === field && c.status !== "rejected").map((c) => c.value))];
     return { field, values };
   });
@@ -1085,7 +1086,7 @@ function MonumentPopup({
         {detail &&
           headline.map(({ field, values }) => (
             <div key={field} className="flex gap-2">
-              <dt className="w-24 shrink-0 text-dust">{fieldLabel(field)}</dt>
+              <dt className="w-24 shrink-0 text-dust">{fieldLabelFor(field, entity.nature)}</dt>
               <dd className="font-serif text-ink">
                 {values.length === 0 ? (
                   <span className="text-dust italic">not recorded yet</span>
