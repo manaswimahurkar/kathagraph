@@ -42,3 +42,10 @@ def test_answer_language_follows_the_question_script():
     assert "Gujarati script" in language_rule("અડાલજની વાવ કોણે બંધાવી?")
     assert "Devanagari" in language_rule("अडालज की वाव किसने बनवाई?")
     assert "English" in language_rule("Who built the Adalaj stepwell?")
+
+
+def test_gujarati_answers_have_no_devanagari_left():
+    from app.ask import to_gujarati_script
+    assert to_gujarati_script("રાણી ઉदयामति [1]") == "રાણી ઉદયામતિ [1]"
+    assert to_gujarati_script("ઈ.સ. १०६३") == "ઈ.સ. ૧૦૬૩"
+    assert to_gujarati_script("Rani ki Vav, 1063") == "Rani ki Vav, 1063"

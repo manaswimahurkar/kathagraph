@@ -8,6 +8,7 @@ question the archive can't answer gets "not recorded yet" instead of a guess.
 """
 import logging
 import re
+import unicodedata
 from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -155,6 +156,20 @@ LANGUAGE_RULE = {
 }
 
 
+def to_gujarati_script(text: str) -> str:
+    """Devanagari letters left in a Gujarati answer (names copied from Hindi sources) written in
+    Gujarati script. The two Unicode blocks are laid out in parallel, 0x180 apart; dandas stay."""
+    out = []
+    for ch in text:
+        o = ord(ch)
+        if 0x0901 <= o <= 0x0963 or 0x0966 <= o <= 0x096F:
+            g = chr(o + 0x180)
+            out.append(g if g.isprintable() and unicodedata.name(g, "") else ch)
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def language_rule(question: str) -> str:
     return LANGUAGE_RULE.get(detect_language(question), "Answer in the language of the question.")
 
@@ -217,6 +232,8 @@ def ask(body: AskIn):
         raise HTTPException(502, f"Couldn't write an answer right now: {e}")
 
     answer, used = clean_citations(out.get("answer") or "", out.get("citations") or [], len(passages))
+    if detect_language(question) == "gu":
+        answer = to_gujarati_script(answer)
     return {
         "question": question,
         "answer": answer,
