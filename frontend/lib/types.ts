@@ -352,3 +352,61 @@ export function tagLabel(tag: string | null): string | null {
   if (!tag) return null;
   return TAG_LABELS[tag] ?? tag.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
+
+// ---------- Living heritage, journeys, digital twin, readable sources (v1.1) ----------
+
+/** GET /sources/{id}/text: a file's text page by page, with English translations of Hindi/Gujarati. */
+export interface SourceText {
+  source: {
+    id: number; filename: string; type: SourceType; status: SourceStatus; error: string | null;
+    file_url: string | null; source_url: string | null; origin: "web" | "field" | null;
+    author: string | null; licence: string | null; created_at: string; parent_source_id: number | null;
+  };
+  pages: { page: number | null; text: string; language: string; text_en: string | null }[];
+  entities: { id: number; name: string; type: string }[];
+  embedded_photos: { id: number; filename: string; file_url: string | null; tag: string | null }[];
+}
+
+export interface Story {
+  id: number;
+  story: string;
+  quote: string | null;
+  confidence: number | null;
+  status: ClaimStatus;
+  method: string;
+  entity: { id: number; name: string; type: string; category: string };
+  lat: number | null;
+  lng: number | null;
+  precision: "exact" | "approximate" | null;
+  source: { id: number; filename: string; origin: "web" | "field" | null; author: string | null; url: string | null };
+}
+export interface StoriesResponse { stories: Story[]; places: number }
+
+export interface JourneyStop {
+  id: number | null; name: string; lat: number; lng: number;
+  n_sources?: number; at?: string; photos?: number; timed?: boolean; thumb?: string | null;
+}
+export interface Journey {
+  id: string; kind: "trail" | "field"; title: string; stops: JourneyStop[]; km: number;
+  category?: string; team?: string; start?: string; end?: string; timed?: boolean; photos?: number;
+}
+export interface JourneysResponse { trails: Journey[]; field: Journey[] }
+
+export interface CraftFact { value: string; quote: string | null; status: ClaimStatus; source_id: number; filename: string }
+export interface CraftPlace { name: string; lat: number; lng: number; how: string; precision: string; entity_id?: number }
+export interface Craft {
+  id: number; name: string; aliases: string[]; facts: Record<string, CraftFact[]>;
+  places: CraftPlace[]; n_sources: number; photos: string[]; missing: string[];
+}
+export interface CraftsResponse { crafts: Craft[] }
+
+export interface TwinShot {
+  id: number; url: string; tag: string | null; author: string | null;
+  side: number | null; distance_m: number | null; heading: number | null;
+}
+export interface TwinReport {
+  entity: { id: number; name: string; lat: number | null; lng: number | null };
+  photos: number; placed: number; coverage: number[]; sides: string[]; kinds: Record<string, number>;
+  score: number; stage: "starting" | "collecting" | "ready" | "modelled"; models: number;
+  todo: string[]; shots: TwinShot[]; target: number;
+}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import KnowledgeGraph from "@/components/KnowledgeGraph";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import DigitalTwin from "@/components/DigitalTwin";
 import Model3D from "@/components/Model3D";
 import PhotoGallery from "@/components/PhotoGallery";
 import SiteWalkthrough from "@/components/SiteWalkthrough";
@@ -126,6 +127,7 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
             {entity.conflicts.length} {entity.conflicts.length === 1 ? "disagreement" : "disagreements"}
           </JumpLink>
           <JumpLink href="#graph">Evidence graph</JumpLink>
+          {entity.type === "monument" && <JumpLink href="#twin">3D twin</JumpLink>}
           <JumpLink href="#missing">{entity.gaps.length} missing</JumpLink>
           {entity.lat != null && <JumpLink href="#visit">Walk through</JumpLink>}
           <JumpLink href="#sources">{entity.sources.length} sources</JumpLink>
@@ -151,6 +153,16 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
           </Link>
         </p>
       </Section>
+      {entity.type === "monument" && (
+        <Section
+          id="twin"
+          title="Towards a 3D digital twin"
+          intro="Every photo of this monument, placed where it was taken from. Photos from all sides, overlapping, are what photogrammetry needs to rebuild the monument in 3D."
+          action="Drag the view to turn it. Download the bundle to build the model, or photograph the sides marked red."
+        >
+          <DigitalTwin entityId={entity.id} />
+        </Section>
+      )}
       <MissingDocs entity={entity} />
       {entity.lat != null && entity.lng != null && (
         <Section
@@ -747,6 +759,14 @@ function SourceList({ entity }: { entity: EntityDetail }) {
                 )}
               </span>
               <span className="text-[13px] text-dust">
+                {s.type !== "photo" && (
+                  <>
+                    <Link href={`/source/${s.id}`} className="text-water underline underline-offset-2">
+                      Read{s.type === "web" ? "" : " text"}
+                    </Link>
+                    {" · "}
+                  </>
+                )}
                 {originOf(s) === "web" ? "From the web · " : "Contributed · "}
                 {TYPE_LABEL[s.type] ?? s.type}
                 {tagLabel(s.tag) && `, ${tagLabel(s.tag)?.toLowerCase()}`}

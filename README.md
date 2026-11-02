@@ -1,43 +1,54 @@
 # KathaGraph
 
-**An evidence-aware heritage archive.** KathaGraph turns the messy files that fieldwork produces (photos, scanned Hindi and English documents, field notes) into a searchable, mapped knowledge base. Every fact links back to the exact words it came from. When sources disagree, both versions are shown side by side. For every monument, it lists the documentation that is still missing.
+**An evidence-aware, living heritage archive for Gujarat.** KathaGraph takes what fieldwork actually produces (photos, slide decks, Word reports, scanned Hindi and Gujarati documents, field notes, whole zipped folders) and turns it into a searchable, mapped, multilingual knowledge base. Every fact links back to the exact words it came from. When sources disagree, both versions are shown. Regional-language documents are translated page by page. Legends, crafts and travel routes are plotted on the map. And each monument's photos are tracked as the raw material for a 3D digital twin.
 
-> *"What do we actually know about this structure, why do we believe it, and what do we still need to verify?"*
+> *"What do we actually know about this place, why do we believe it, and what do we still need to record?"*
 
-Built for **HackCult '26, Track 2: Cultural & Digital Heritage**.
+Built for **HackCult '26 · Track 2: Culture & Digital Heritage · HC26-CULT01** (Blithchron '27, IIT Gandhinagar).
 
 | | |
 |---|---|
-| Live app | https://kathagraph.vercel.app |
+| Live site | https://kathagraph.vercel.app |
 | Live API + interactive docs | https://kathagraph-api.onrender.com/docs |
-| Team | Manaswi Mahurkar (backend & pipeline) · Sameehan Divekar (frontend, data & demo) |
+| Team | Manaswi Mahurkar (backend, AI pipeline) · Sameehan Divekar (frontend, 3D, data) |
 
 ---
 
 ## The problem
 
-Fellowship programmes such as IIT Gandhinagar's Explorer Fellowship collect thousands of photos, regional-language documents and field notes. They end up in an "archival graveyard" of slide decks and cloud folders. Search is only the visible symptom. Underneath, there are five deeper failures:
+Programmes like IIT Gandhinagar's Explorer Fellowship produce a constant flow of photos, regional-language documents and travel journals. Most of it ends in an "archival graveyard" of slide decks and cloud folders. Search is only the visible symptom. Underneath there are five failures, and KathaGraph is designed around them:
 
-1. **Context collapse.** A photo survives, but what it shows and where it belongs are lost.
-2. **Fragmented memory.** Different teams document the same monument under different names and spellings.
-3. **Hidden disagreement.** Two reports give different dates, and nothing tells the reader.
-4. **Invisible gaps.** 800 photos can still have no interior shot and no inscription transcript.
-5. **Digitisation that erases uncertainty.** OCR errors and AI guesses look like facts once typed up.
-
-## What KathaGraph does
-
-| Capability | How |
+| Failure | What KathaGraph does about it |
 |---|---|
-| **Read anything** | Photos, PDFs (text and scanned), notes, CSVs. OCR in **Hindi + English** (Tesseract). GPS and capture time from photo EXIF. |
-| **Search by meaning, across languages** | Gemini embeddings + pgvector. "who built the stepwell" finds a note saying "completed by Queen Rudabai", and a Hindi query finds English text. Falls back to keyword search if the AI service is down. |
-| **Extract facts with their evidence** | Gemini proposes claims (built date, builder, dynasty, location, style, material…) as structured JSON. Each claim stores the **exact quote**, method and confidence, and starts as **unverified**. |
-| **Connect the evidence** | Different spellings and scripts ("Adalaj Stepwell", "Adalaj ni Vav", "अडालज की वाव") merge into one monument. Photos link by filename or GPS distance. |
-| **Show disagreement** | Same monument + same field + clearly different values = a conflict, shown side by side with both sources. |
-| **Expose what's missing** | Each monument is checked against a documentation checklist (exterior and interior photos, inscription, date, builder, location). |
-| **Keep humans in charge** | Researchers verify or reject claims. Rejecting one side of a conflict resolves it. |
-| **Catch duplicates** | Identical files (by SHA-256) are recognised and not processed twice. |
+| **Context collapse**: a photo survives, but what it shows and where it belongs are lost | Photos are described by AI, matched to their monument by name, filename, GPS or the deck they came from, and placed around the monument |
+| **Fragmented memory**: teams record the same place under different names and scripts | Names, spellings and scripts merge into one record; uncertain pairs go to a "Same place?" review |
+| **Hidden disagreement**: two reports give different dates and nobody notices | Conflicts are detected by plain, tested code (date ranges, Vikram Samvat, regnal numbers) and shown side by side |
+| **Invisible gaps**: 800 photos, but no interior shot and no inscription | Every record is scored against a checklist that fits the kind of site (a temple needs a builder and a date; a city needs its founding; a mountain needs neither); the gaps drive field-visit plans and 3D coverage |
+| **Digitisation that erases uncertainty**: OCR errors and AI guesses look like facts | Every AI fact keeps its quote, method and calibrated confidence, starts **unverified**, and enters a risk-ranked review queue |
 
-**Key design rule:** *the AI suggests, it never decides what is true.* Conflicts are detected with plain, testable code, not by asking a model which source is right.
+**Design rule:** *the AI suggests; it never decides what is true.*
+
+## The three innovation pathways
+
+The problem statement lists three pathways. KathaGraph combines all three on one shared evidence store.
+
+### 1. Archival NLP / OCR: read and translate regional documents
+- OCR in **Gujarati, Hindi and English** (Tesseract `guj+hin+eng`), for scanned PDFs and photos that show writing.
+- **Whole-document translation** of Hindi and Gujarati files into English, page by page, stored beside the original. The reader at `/source/{id}` shows the original and the English side by side, labelled as a machine translation.
+- **Inscription reader** (`/inscription`): a vision model transcribes and translates an inscription photo; Vikram Samvat and Shaka dates are converted to the Common Era by fixed rules in code, not by the model.
+- **Cross-language semantic search** (Gemini embeddings + pgvector) and **cited question answering** (`/ask`) in English, Hindi or Gujarati, where every sentence of the answer cites a passage.
+
+### 2. Geospatial / immersive web: explore the region spatially
+- **3D map of Gujarat** (Three.js) with every monument, coloured by how well documented it is.
+- **Stories & legends** (`/stories`): folklore found in the archive's texts, pinned to the place it is told about, with the original quote.
+- **Routes & journeys** (`/journeys`): field teams' real routes rebuilt from photo GPS and time stamps, plus heritage trails (stepwells, temples, forts…) in a sensible visiting order.
+- **Crafts** (`/crafts`): indigenous crafts as records of their own (technique, practitioners, materials, where they are practised), mapped from the places documents name.
+- **Timeline** (`/timeline`) of every dated monument, with uncertain dates kept as ranges; **"I'm here"** (`/field`) for on-site use; **Street View walkthroughs** on each record.
+
+### 3. Computer vision / 3D: towards digital twins from crowdsourced photos
+- Each monument page has a **digital-twin panel**: a WebGL scene that hangs every photo where it was taken from (EXIF GPS and compass heading), a coverage ring showing which of the eight sides are photographed, a readiness score and plain instructions ("No photos yet from the north-west side").
+- One click downloads a **photogrammetry bundle**: every photo plus `cameras.csv` (position, heading, credit) ready for Meshroom or COLMAP.
+- Finished models (uploaded `.glb` or Sketchfab) display in an interactive **3D viewer** at the top of the record.
 
 ---
 
@@ -45,38 +56,68 @@ Fellowship programmes such as IIT Gandhinagar's Explorer Fellowship collect thou
 
 ```mermaid
 flowchart LR
-    U[Researcher] --> FE["Next.js frontend (Vercel)<br/>map · search · monument page · upload"]
-    FE -->|REST / JSON| API["FastAPI backend (Render, Docker)"]
-    API -->|files| ST[(Supabase Storage)]
-    API -->|background task per file| P[Ingestion pipeline]
-    P --> S1[1. EXIF / GPS]
-    P --> S2["2. Text + OCR<br/>Tesseract hin+eng"]
-    P --> S3["3. AI photo description<br/>Gemini vision"]
-    P --> S4["4. Embeddings<br/>Gemini, 768-d"]
-    P --> S5["5. Claim extraction<br/>Gemini, JSON schema"]
-    P --> S6["6. Entity matching<br/>names · aliases · filename · GPS"]
-    S1 & S2 & S3 & S4 & S5 & S6 --> DB[("PostgreSQL + pgvector<br/>Supabase")]
-    API --> DB
-    DB --> A["Conflict + gap analysis<br/>(plain code, unit-tested)"]
+    subgraph Client["Browser"]
+        FE["Next.js 15 + Tailwind 4 + react-three-fiber<br/>(Vercel)"]
+    end
+    subgraph API["FastAPI (Render, Docker)"]
+        UP["/upload<br/>validate · hash · store · 202"]
+        Q["Background worker<br/>one file at a time"]
+        R["Read APIs<br/>search · ask · entities · review<br/>timeline · stories · journeys · crafts · twin"]
+    end
+    ST[("Supabase Storage<br/>original files")]
+    DB[("PostgreSQL + pgvector<br/>(Supabase)")]
+    G["Gemini<br/>vision · JSON extraction · embeddings · translation<br/>with model fallback"]
+    WK["Wikipedia / Wikidata / Commons<br/>(openly licensed references)"]
+
+    FE -->|REST / JSON| UP
+    FE -->|REST / JSON| R
+    UP --> ST
+    UP --> Q
+    Q --> G
+    Q --> DB
+    R --> DB
+    R --> G
+    WK -->|import| Q
 ```
 
-**Request flow for an upload:** the API validates each file (type, size, emptiness, duplicate hash), stores it in Supabase Storage, creates a `sources` row and replies **202 Accepted** at once. A background task then runs the pipeline and moves the file through `pending → processing → done | failed`. One bad file can never take the server down, and a warning such as "OCR skipped" is recorded without failing the file.
+### The ingestion pipeline (one file)
+
+```mermaid
+flowchart TD
+    A[File arrives<br/>photo · pdf · note · csv · pptx · docx · zip] --> Z{zip?}
+    Z -->|yes| Z1[Unpack; folder names become context] --> A
+    Z -->|no| B[1. EXIF: GPS, time, compass heading]
+    B --> C[2. AI photo description + type<br/>exterior · interior · inscription · carving]
+    C --> D[3. Text: parse or OCR guj+hin+eng<br/>decks: one page per slide, speaker notes kept]
+    D --> E[4. Chunk on sentence boundaries + embed 768-d]
+    E --> T[4b. Translate Hindi / Gujarati pages to English]
+    T --> F[5. Extract facts, legends, craft details<br/>JSON schema · exact quote · calibrated confidence]
+    F --> G[6. Link to monuments<br/>home record → names → filename → GPS → parent deck]
+    G --> H[7. Photos inside decks and reports<br/>become their own sources and run steps 1-6]
+```
+
+Uploads return **202 Accepted** immediately; files move through `pending → processing → done | failed`. One bad file never stops the others, and soft problems ("OCR skipped") are stored as warnings on the file. On restart, files left mid-processing are picked up again.
 
 ### Backend modules (`backend/app/`)
 
 | Module | Responsibility |
 |---|---|
-| `main.py` | App setup, upload, sources, search, admin endpoints, startup recovery |
-| `entities.py` | Monuments, claims (verify/reject), reprocessing |
-| `pipeline.py` | The six processing stages for one file |
-| `text_extract.py` | Notes, PDFs, OCR, chunking, language detection |
-| `exif.py` | GPS and capture time from photos |
-| `embeddings.py` | Gemini embeddings for semantic search |
-| `gemini.py` | Gemini client: JSON-schema answers, retries with back-off, **automatic fallback to lighter models** when one is overloaded |
-| `claims.py` | Fact-extraction and photo-description prompts and schemas |
-| `matching.py` | Name normalisation (synonyms like vav/stepwell/baoli), fuzzy and GPS matching |
-| `analysis.py` | Conflict and gap detection |
-| `storage.py` | Supabase Storage uploads |
+| `main.py` | App setup, upload (incl. zip expansion and contributor credit), sources, readable text, search, admin jobs |
+| `pipeline.py` | The processing stages for one file, under a lock sized for a 512 MB server |
+| `text_extract.py` / `office.py` | Notes, PDFs, OCR, CSV; PowerPoint and Word parsing with embedded photos; chunking and language detection (en/hi/gu) |
+| `exif.py` | GPS, capture time and compass heading |
+| `gemini.py` | Gemini client: JSON-schema answers, retries with back-off, fallback to lighter models |
+| `claims.py` | Prompts and schemas for facts, legends, crafts and photo descriptions; confidence calibration against the quote |
+| `translate.py` | Page-by-page translation of regional-language documents |
+| `matching.py` | Name normalisation across spellings and scripts (vav / stepwell / वाव), fuzzy and GPS matching |
+| `analysis.py` | Conflict and gap detection: date ranges (BCE, Vikram Samvat, centuries), regnal names, value grouping |
+| `entities.py` | Records, claims (verify / reject), priorities, 3D models, Wikipedia and Wikidata imports |
+| `ask.py` | Retrieval-augmented answers with per-sentence citations and answer-language rules |
+| `insights.py` | Risk-ranked review queue, timeline, inscription reader |
+| `merge.py` | "Same place?" duplicate detection and merging |
+| `living.py` | Stories, journeys and trails, crafts, digital-twin readiness and photogrammetry bundles |
+| `places.py` | Gazetteer of Gujarat towns and districts for placing names found in text |
+| `models3d.py` / `wiki.py` / `wikidata.py` / `storage.py` | Categories and 3D models; reference imports; Supabase Storage |
 
 ---
 
@@ -85,41 +126,60 @@ flowchart LR
 ```mermaid
 erDiagram
     sources ||--o{ chunks : "text split into"
+    sources ||--o{ translations : "translated as"
     sources ||--o{ claims : "states"
     sources ||--o{ entity_sources : "is evidence for"
+    sources ||--o{ sources : "contains (photos in a deck)"
     entities ||--o{ entity_sources : "has evidence"
     entities ||--o{ entity_aliases : "also called"
     entities ||--o{ claims : "is described by"
+    entities ||--o{ models : "has 3D model"
+    entities ||--o{ entity_not_same : "is not the same as"
     chunks ||--o{ claims : "quoted in"
     checklist_items }o..o{ entities : "required for type"
 
     sources {
         bigint id PK
-        text type "photo | pdf | note | csv"
+        text type "photo | pdf | note | csv | web | slides | doc"
         text filename
         text file_url
-        jsonb exif_json
+        jsonb exif_json "incl. GPSImgDirection"
         float lat
         float lng
+        timestamptz captured_at
         text tag "AI photo type"
         text description "AI photo description"
         text content_hash "SHA-256, duplicates"
         text status "pending | processing | done | failed"
+        text origin "field | web"
+        text author "contributor / team"
+        text licence
+        text source_url
+        bigint entity_id FK "home record for imports"
+        bigint parent_source_id FK "deck a photo came from"
+        bool stories_checked
     }
     chunks {
         bigint id PK
         bigint source_id FK
-        int page
+        int page "page or slide"
         text text
-        text language "hi | en | mixed"
+        text language "en | hi | gu | mixed"
         vector embedding "768-d, HNSW index"
+    }
+    translations {
+        bigint source_id PK
+        int page PK
+        text text_en "machine translation"
     }
     entities {
         bigint id PK
         text name
-        text type "monument | motif | craft | place | person"
+        text type "monument | craft | motif | place | person"
+        text nature "built | natural | settlement"
         float lat
         float lng
+        text coord_precision "exact | approximate"
     }
     entity_aliases {
         bigint entity_id FK
@@ -129,19 +189,31 @@ erDiagram
     claims {
         bigint id PK
         bigint entity_id FK
-        text field
+        text field "built_date, builder, legend, technique, practitioners..."
         text value
         text quote "exact evidence"
         bigint source_id FK
         bigint chunk_id FK
-        text method "ocr | llm | exif | manual"
-        real confidence
+        text method "ocr | llm | exif | manual | import"
+        real confidence "calibrated"
         text status "unverified | verified | rejected"
     }
     entity_sources {
         bigint entity_id FK
         bigint source_id FK
         text tag
+    }
+    models {
+        bigint id PK
+        bigint entity_id FK
+        text provider "sketchfab | file"
+        text url
+        text author
+        text licence
+    }
+    entity_not_same {
+        bigint a FK
+        bigint b FK
     }
     checklist_items {
         bigint id PK
@@ -151,55 +223,73 @@ erDiagram
     }
 ```
 
-**Why claims are separate from sources:** a claim is *one fact as stated by one source*, never "the truth". Keeping them separate is what makes provenance, conflicts and verification possible. The full schema is in [`backend/schema.sql`](backend/schema.sql), and row-level security is enabled so Supabase's public API cannot read the tables. Only the backend can.
+**Why claims are separate from sources:** a claim is *one fact as stated by one source*, never "the truth". That separation is what makes provenance, conflicts, verification and the review queue possible. Legends and craft details are claims too, so they get the same quotes, confidence and review. Translations live in their own table so the original text is never overwritten. The full schema is [`backend/schema.sql`](backend/schema.sql); migrations are in [`backend/migrations/`](backend/migrations). Row-level security is on for every table, so only the backend can read them.
 
 ---
 
 ## API
 
-Full interactive documentation: **[/docs](https://kathagraph-api.onrender.com/docs)**. Response shapes are in [`CONTRACT.md`](CONTRACT.md).
+Interactive documentation: **[/docs](https://kathagraph-api.onrender.com/docs)**. Response shapes: [`CONTRACT.md`](CONTRACT.md).
 
 | Method | Endpoint | Purpose |
 |---|---|---|
 | GET | `/health` | API + database + pgvector check |
-| POST | `/upload` | Upload up to 50 files (20 MB each) → `202` |
+| POST | `/upload` | Up to 50 files (photos/notes 20 MB, decks/reports 50 MB, zip 100 MB) with optional contributor credit → `202` |
 | GET | `/sources`, `/sources/{id}` | Files and their processing status |
-| GET | `/sources/{id}/text` | What was read from a file |
+| GET | `/sources/{id}/text` | The file's text page by page, with English translations and linked records |
 | DELETE | `/sources/{id}` | Remove a file and everything derived from it |
-| POST | `/sources/{id}/reprocess` | Run the pipeline again |
-| GET | `/search?q=` | Semantic search (keyword fallback) |
-| GET | `/entities` | Monuments with counts of sources, claims, conflicts, gaps |
-| GET | `/entities/{id}` | Facts + evidence, conflicts, gaps, sources |
-| POST / PATCH | `/entities`, `/entities/{id}` | Register a monument or set its location |
-| PATCH | `/claims/{id}` | Verify or reject a claim |
+| GET | `/search?q=` | Semantic search across languages (keyword fallback) |
+| POST | `/ask` | Cited answer from the archive only, in the question's language |
+| GET | `/entities`, `/entities/{id}` | Records with facts, evidence, conflicts, gaps, sources, completeness |
+| PATCH | `/claims/{id}` | Verify or reject a fact |
+| GET | `/review` | Unverified facts ranked by how likely they are to be wrong |
+| GET | `/timeline` | Dated monuments with date ranges ("built" or, for settlements, "founded"); natural sites listed apart |
+| POST | `/inscription/read` | Transcribe and translate an inscription photo |
+| GET | `/duplicates` · POST `/entities/{id}/merge` · POST `/duplicates/dismiss` | "Same place?" review |
+| GET | `/priorities` | What to document next, by record |
+| GET | `/stories` | Legends with their quotes and map positions |
+| GET | `/journeys` | Field journeys from photo GPS/time, and heritage trails |
+| GET | `/crafts` | Craft records with facts and documented places |
+| GET | `/entities/{id}/twin` | 3D readiness: photo positions, side coverage, score, next shots |
+| GET | `/entities/{id}/photo-bundle` | Zip of photos + `cameras.csv` for photogrammetry |
+| POST | `/entities/{id}/models` | Attach a Sketchfab model or upload a `.glb` |
+| POST | `/import/wikipedia` · `/import/wikidata` | Import openly licensed references for monuments or crafts |
+| POST | `/entities/{id}/redate` | Read a monument's texts again for its date of construction or founding only |
+| POST | `/admin/classify-nature` | Mark each site built, natural or settlement from Wikidata "instance of" |
+| POST | `/admin/translate` · `/admin/extract-stories` · `/admin/rechunk` · `/admin/reindex` | Backfill jobs for files already in the archive |
 
 ---
 
 ## Scalability
 
-The prototype runs on free tiers. The design scales without a rewrite:
+The prototype runs on free tiers (Render 512 MB, Supabase free, Gemini free). The design scales without a rewrite:
 
-- **Processing is already asynchronous** (upload returns 202, then a background task runs). For large archives, swap FastAPI background tasks for a job queue (Redis + RQ/Celery, or Supabase Queues) with several workers. The pipeline functions don't change.
-- **Files live in object storage, not on the server**, so API instances are stateless and can be scaled horizontally.
-- **Vector search uses an HNSW index** (pgvector), which stays fast into millions of chunks.
-- **The heavy AI work is behind an API**, with retries, back-off and model fallback, so it doesn't consume server memory. A self-hosted OCR/embedding service can replace it module by module.
-- **Connection pooling** (Supabase pooler, `psycopg_pool`) is the next step for high request volume.
+- **Asynchronous by design.** Upload returns 202 and work happens in a background task, one file at a time to fit a small server. For a large archive, the lock becomes a job queue (Redis + RQ/Celery or Supabase Queues) with several workers; the pipeline functions don't change.
+- **Stateless API.** Files live in object storage and state in Postgres, so API instances scale horizontally behind a load balancer.
+- **Vector search on an HNSW index** (pgvector) stays fast into millions of chunks; the same database handles relational queries, so there is no second store to keep in sync.
+- **Idempotent, resumable processing.** Duplicate files are caught by SHA-256; translation and story passes skip what is already done, so backfills can be stopped and restarted.
+- **AI behind an interface.** Gemini calls go through one client with retries, back-off and model fallback. OCR, translation or embeddings can each be swapped for a self-hosted model (e.g. a vision-transformer OCR such as TrOCR, IndicTrans2 for translation) module by module.
+- **Bounded work per request.** Uploads, zip expansion, embedded images, translated pages and photogrammetry bundles all have explicit limits; bundles are streamed through a temporary file, not held in memory.
+- **Next steps for heavy traffic:** a connection pool (`psycopg_pool` / Supabase pooler), CDN image thumbnails, and caching of the read-mostly endpoints (map, timeline, stories).
 
 ## Limitations (honest)
 
-- Demo data is a small, clearly labelled set about 2–3 Gujarat stepwells.
-- Tesseract OCR struggles with worn or handwritten inscriptions. A vision-transformer OCR (e.g. TrOCR) is the upgrade path.
-- Claims come from an LLM. They are marked unverified and always carry their quote, but extraction can miss facts.
-- No login or access levels yet: everything uploaded is public.
-- Gemini's free tier is rate-limited, so large batches are slow (they retry rather than fail).
+- The archive is a pilot: about 75 Gujarat records from Wikipedia, Wikidata, Commons and the team's own field material.
+- Tesseract struggles with worn or handwritten inscriptions; the vision-model inscription reader helps, but transcriptions still need a person to check them.
+- Facts, legends and translations come from an LLM. They are labelled, carry their quote, and start unverified, but extraction can miss things and translation can be wrong.
+- KathaGraph does not run photogrammetry itself: a free server cannot. It measures coverage, plans shots and packages the photos; the model is built in Meshroom/COLMAP and uploaded back.
+- Most imported photos have no GPS, so they can't be placed around a monument; field photos taken with location on can.
+- Craft and story locations found in text use a town-level gazetteer, so they are marked approximate.
+- No login or access levels yet, so admin jobs are open and everything uploaded is public.
+- Gemini's free tier is rate-limited; large batches are slow (they retry rather than fail).
 
 ## Roadmap
 
-1. Access levels (public / researcher / community-only), so sensitive knowledge isn't exposed.
-2. Translation of OCR'd text, and Gujarati OCR.
-3. Oral-history audio with transcripts.
-4. A "next field visit" research brief per monument, generated from its gaps.
-5. 3D reconstruction from crowdsourced photos.
+1. Access levels (public / researcher / community-only) so sensitive community knowledge isn't exposed.
+2. Server-side photogrammetry workers (COLMAP on GPU) that turn a "ready" photo set into a model automatically.
+3. Oral-history audio with transcripts and translations.
+4. Self-hosted Indic OCR and translation models for scale and privacy.
+5. Open data export (IIIF manifests, CSV/JSON-LD) for academic reuse.
 
 ---
 
@@ -208,7 +298,7 @@ The prototype runs on free tiers. The design scales without a rewrite:
 **Requirements:** Python 3.10+, Node 20+, a Supabase project, a Gemini API key (free at [aistudio.google.com](https://aistudio.google.com)).
 
 ### 1. Database (Supabase)
-1. Create a project, open **SQL Editor**, and run [`backend/schema.sql`](backend/schema.sql).
+1. Create a project, open **SQL Editor**, and run [`backend/schema.sql`](backend/schema.sql) (it includes every migration).
 2. **Storage → New bucket** → name `archive`, **public**.
 
 ### 2. Backend
@@ -224,7 +314,7 @@ Fill in `.env`:
 
 | Variable | Where to find it |
 |---|---|
-| `DATABASE_URL` | Supabase → Connect → Direct → **Session pooler** URI |
+| `DATABASE_URL` | Supabase → Connect → **Session pooler** URI |
 | `CORS_ORIGINS` | Comma-separated frontend URLs, e.g. `http://localhost:3000` |
 | `SUPABASE_URL` | `https://<project-ref>.supabase.co` |
 | `SUPABASE_SERVICE_KEY` | Supabase → Project Settings → API Keys → `service_role` (**secret**) |
@@ -232,7 +322,7 @@ Fill in `.env`:
 | `GEMINI_API_KEY` | aistudio.google.com → Get API key |
 
 Open http://localhost:8000/health → `{"ok":true,"db":true,"pgvector":true}`.
-OCR needs Tesseract with Hindi data (`tesseract-ocr-hin`). It's included in the Docker image. Without it, OCR is skipped with a clear message.
+OCR needs Tesseract with Gujarati and Hindi data (`tesseract-ocr-guj`, `tesseract-ocr-hin`); both are in the Docker image. Without them OCR is skipped with a clear message.
 
 ### 3. Frontend
 ```bash
@@ -241,26 +331,35 @@ npm install
 echo NEXT_PUBLIC_API_URL=http://localhost:8000 > .env.local
 npm run dev
 ```
-Open http://localhost:3000.
+Open http://localhost:3000. With `NEXT_PUBLIC_API_URL=mock` the site runs on clearly labelled demo data with no backend.
 
-### 4. Tests
+### 4. Seed it (optional)
+With the backend running, import reference articles and let the backfills run:
+```bash
+curl -X POST localhost:8000/import/wikipedia -H "Content-Type: application/json" -d "{\"titles\":[\"Adalaj Stepwell\",\"Rani ki vav\"]}"
+curl -X POST localhost:8000/import/wikipedia -H "Content-Type: application/json" -d "{\"titles\":[\"Patola\",\"Ajrakh\",\"Rogan art\"],\"kind\":\"craft\"}"
+curl -X POST localhost:8000/admin/extract-stories
+curl -X POST localhost:8000/admin/translate
+```
+
+### 5. Tests
 ```bash
 cd backend
 pip install -r requirements-dev.txt
 python -m pytest
 ```
-26 unit tests cover name matching, conflict and gap detection, text extraction and GPS reading.
+About 100 unit tests (150+ cases) cover name matching across scripts, conflict and date logic (BCE, Vikram Samvat, regnal names), text and slide-deck extraction, EXIF, the review-risk score, duplicate detection, citations, translation triggers, place finding, journeys and digital-twin coverage.
 
 ## Deploy
-- **Backend:** Render → New Web Service → this repo, root `backend`, runtime **Docker**. Add the environment variables above (with `CORS_ORIGINS` including the Vercel URL).
-- **Frontend:** Vercel → import repo, root `frontend`, set `NEXT_PUBLIC_API_URL` to the Render URL.
-- Every push to `main` redeploys both.
+- **Backend:** Render → New Web Service → this repo, root `backend`, runtime **Docker**, with the variables above (`CORS_ORIGINS` including the Vercel URL).
+- **Frontend:** Vercel → import repo, root `frontend`, `NEXT_PUBLIC_API_URL` = the Render URL.
+- Every push to `main` redeploys both. Run new files in `backend/migrations/` in the Supabase SQL Editor first.
 
 ## Repo layout
 ```
-backend/     FastAPI app (app/), tests/, schema.sql, Dockerfile
-frontend/    Next.js + Tailwind app (map, monument, search, upload pages)
+backend/     FastAPI app (app/), tests/, schema.sql, migrations/, Dockerfile
+frontend/    Next.js app: app/ (pages), components/ (map, 3D, graph), lib/ (API client, types)
 CONTRACT.md  API contract between frontend and backend
 ```
 
-*Demo data: photos from Wikimedia Commons (CC-licensed, credited in the app). The field notes are written by the team and labelled "demo data".*
+*Reference material is imported from Wikipedia, Wikidata and Wikimedia Commons under their open licences and credited on every record. Field material is credited to its contributors.*

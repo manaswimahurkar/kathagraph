@@ -8,11 +8,12 @@ from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadF
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import embeddings, office
+from . import embeddings, office, text_extract, translate
 from .db import get_conn
 from .ask import router as ask_router
 from .entities import router as entities_router
 from .insights import router as insights_router
+from .living import router as living_router
 from .merge import router as merge_router
 from .pipeline import embed_chunks, process_source, rechunk_source
 from .storage import StorageError, upload_bytes
@@ -34,6 +35,7 @@ app.include_router(entities_router)
 app.include_router(ask_router)
 app.include_router(insights_router)
 app.include_router(merge_router)
+app.include_router(living_router)
 
 
 @app.on_event("startup")
@@ -217,16 +219,41 @@ def delete_source(source_id: int):
 
 @app.get("/sources/{source_id}/text")
 def get_source_text(source_id: int):
-    """The text extracted from one file, piece by piece (for checking OCR)."""
+    """The text extracted from one file: its passages, and its pages put back together for reading,
+    each with an English machine translation when the original is in Hindi or Gujarati."""
     with get_conn() as conn:
-        src = conn.execute("select id, filename, status, error from sources where id = %s", (source_id,)).fetchone()
+        src = conn.execute(f"select {SOURCE_FIELDS} from sources where id = %s", (source_id,)).fetchone()
         if not src:
             raise HTTPException(404, "Source not found.")
         chunks = conn.execute(
             "select id, page, language, text from chunks where source_id = %s order by page nulls first, id",
             (source_id,),
         ).fetchall()
-    return {"source": src, "chunks": chunks}
+        english = {r["page"]: r["text_en"] for r in conn.execute(
+            "select page, text_en from translations where source_id = %s", (source_id,)).fetchall()}
+        entities = conn.execute(
+            """select e.id, e.name, e.type from entity_sources es join entities e on e.id = es.entity_id
+               where es.source_id = %s order by e.name""", (source_id,)).fetchall()
+        children = conn.execute(
+            "select id, filename, file_url, tag from sources where parent_source_id = %s order by id", (source_id,)
+        ).fetchall()
+    by_page: dict[int, list[str]] = {}
+    for c in chunks:
+        if not c["text"].startswith("[AI"):
+            by_page.setdefault(c["page"] or 0, []).append(c["text"])
+    pages = []
+    for page, parts in by_page.items():
+        text = text_extract.stitch(parts)
+        pages.append({"page": page or None, "text": text, "language": text_extract.detect_language(text),
+                      "text_en": english.get(page)})
+    return {"source": src, "chunks": chunks, "pages": pages, "entities": entities, "embedded_photos": children}
+
+
+@app.post("/admin/translate", status_code=202)
+def translate_all(background: BackgroundTasks):
+    """Translate every stored Hindi or Gujarati document that has no English translation yet."""
+    background.add_task(translate.backfill)
+    return {"queued": True}
 
 
 def _escape_like(word: str) -> str:

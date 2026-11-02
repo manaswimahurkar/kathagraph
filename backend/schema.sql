@@ -145,3 +145,20 @@ create table if not exists entity_not_same (
   check (a < b)
 );
 alter table entity_not_same enable row level security;
+
+-- English translations of Hindi / Gujarati documents, and the "stories read" flag (v1.1)
+create table if not exists translations (
+  source_id  bigint not null references sources(id) on delete cascade,
+  page       int not null default 0,
+  text_en    text not null,
+  created_at timestamptz not null default now(),
+  primary key (source_id, page)
+);
+alter table translations enable row level security;
+alter table sources add column if not exists stories_checked boolean not null default false;
+
+-- Built, natural or settlement: what kind of site each monument is (v1.2)
+alter table entities add column if not exists nature text not null default 'built';
+alter table entities drop constraint if exists entities_nature_check;
+alter table entities add constraint entities_nature_check check (nature in ('built', 'natural', 'settlement'));
+alter table entities add column if not exists nature_source text;  -- 'wikidata' or 'manual' (manual is never overwritten)

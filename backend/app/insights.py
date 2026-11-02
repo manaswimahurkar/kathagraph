@@ -134,7 +134,7 @@ def timeline():
     `variants` keeps each version with its sources, so disagreement stays visible."""
     with get_conn() as conn:
         ents = conn.execute(
-            "select id, name, lat, lng from entities where type = 'monument' order by name").fetchall()
+            "select id, name, lat, lng, nature from entities where type = 'monument' order by name").fetchall()
         claims = conn.execute(
             """select c.id, c.entity_id, c.field, c.value, c.status, c.source_id, s.filename
                from claims c join sources s on s.id = c.source_id
@@ -144,8 +144,13 @@ def timeline():
     for c in claims:
         by_entity[c["entity_id"]].append(c)
 
-    dated, undated = [], []
+    dated, undated, natural = [], [], []
     for e in ents:
+        nature = e["nature"] or "built"
+        if nature == "natural":  # a mountain or an island has no date of construction
+            natural.append({"id": e["id"], "name": e["name"], "category": models3d.category_for(e["name"]),
+                            "nature": nature, "lat": e["lat"], "lng": e["lng"]})
+            continue
         cs = by_entity.get(e["id"], [])
         dates = [c for c in cs if c["field"] == "built_date"]
         verified = [c for c in dates if c["status"] == "verified"]
@@ -153,7 +158,8 @@ def timeline():
         span = date_span([c["value"] for c in basis])
         dynasties = Counter(analysis.value_groups([c for c in cs if c["field"] == "dynasty"]).values())
         item = {"id": e["id"], "name": e["name"], "category": models3d.category_for(e["name"]),
-                "dynasty": dynasties.most_common(1)[0][0] if dynasties else None}
+                "dynasty": dynasties.most_common(1)[0][0] if dynasties else None,
+                "nature": nature, "date_meaning": "founded" if nature == "settlement" else "built"}
         if not span:
             undated.append(item)
             continue
@@ -168,7 +174,84 @@ def timeline():
                       "disputed": len(variants) > 1 and not verified,
                       "variants": sorted(variants.values(), key=lambda v: (v["span"] or (0, 0))[0])})
     dated.sort(key=lambda d: (d["span"][0], d["span"][1]))
-    return {"monuments": dated, "undated": undated}
+    return {"monuments": dated, "undated": undated, "natural": natural}
+
+
+# ---------- reading a monument's date again ----------
+
+DATE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {"dates": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {
+        "value": {"type": "STRING"}, "quote": {"type": "STRING"}, "confidence": {"type": "NUMBER"},
+    }, "required": ["value", "quote", "confidence"]}}},
+    "required": ["dates"],
+}
+DATE_PROMPT = """From the text below about {name}, find when it was {meaning}.
+{rule}
+- NOT the year it was discovered, excavated, restored, renovated, listed as a World Heritage Site or protected.
+- value: a CE year as digits ("1499"), a BCE year as "2650 BCE", a range ("2650 BCE - 1450 BCE"), or a century
+  ("15th century"). Convert Vikram Samvat by subtracting 57.
+- quote: the exact words from the text, copied verbatim in the original language.
+- If the text does not say, return {{"dates": []}}.
+Text:
+---
+{text}
+---"""
+
+
+def redate_entity(entity_id: int) -> int:
+    """Ask again, from the monument's own texts, only for its date of construction (or founding).
+    Returns the number of new date claims saved."""
+    from . import claims as claims_mod
+    with get_conn() as conn:
+        ent = conn.execute("select id, name, nature from entities where id = %s", (entity_id,)).fetchone()
+        if not ent:
+            return 0
+        rows = conn.execute(
+            """select ch.id, ch.source_id, ch.text from entity_sources es
+               join sources s on s.id = es.source_id join chunks ch on ch.source_id = s.id
+               where es.entity_id = %s and s.type <> 'photo' and ch.text not like '[AI%%'
+               order by s.id, ch.page nulls first, ch.id""", (entity_id,)).fetchall()
+        existing = {r["value"] for r in conn.execute(
+            "select value from claims where entity_id = %s and field = 'built_date'", (entity_id,)).fetchall()}
+    if not rows or not gemini.available():
+        return 0
+    settlement = ent["nature"] == "settlement"
+    meaning = "founded or first settled" if settlement else "built"
+    rule = ("- For an ancient city, give the period it was first settled (e.g. its Harappan phase)."
+            if settlement else "- The year construction was completed, or the period it was built.")
+    by_source: dict[int, list[dict]] = defaultdict(list)
+    for r in rows:
+        by_source[r["source_id"]].append(r)
+    saved = 0
+    for source_id, chunks in by_source.items():
+        text = "\n\n".join(c["text"] for c in chunks)[:12000]
+        try:
+            out = gemini.generate_json([{"text": DATE_PROMPT.format(name=ent["name"], meaning=meaning, rule=rule, text=text)}],
+                                       DATE_SCHEMA, temperature=0.0)
+        except gemini.GeminiError as e:
+            log.warning("Redate %s / source %s failed: %s", entity_id, source_id, e)
+            continue
+        for d in out.get("dates", [])[:2]:
+            value, quote = str(d.get("value", "")).strip(), str(d.get("quote", "")).strip()
+            if not value or value in existing or analysis.year_range(value) is None:
+                continue
+            chunk_id = next((c["id"] for c in chunks if quote and quote[:40] in c["text"]), chunks[0]["id"])
+            try:
+                conf = max(0.0, min(1.0, float(d.get("confidence", 0.5))))
+            except (TypeError, ValueError):
+                conf = 0.5
+            with get_conn() as conn:
+                conn.execute(
+                    """insert into claims (entity_id, field, value, quote, source_id, chunk_id, method, confidence)
+                       values (%s, 'built_date', %s, %s, %s, %s, 'llm', %s)""",
+                    (entity_id, value, quote or None, source_id, chunk_id,
+                     claims_mod.calibrate(conf, quote, text)),
+                )
+            existing.add(value)
+            saved += 1
+    log.info("Redate %s: %d new date(s)", entity_id, saved)
+    return saved
 
 
 # ---------- inscription reader ----------

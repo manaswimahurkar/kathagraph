@@ -118,8 +118,8 @@ def _save_source(article: dict, lang: str, entity_id: int) -> tuple[int, bytes] 
     return source_id, data
 
 
-def import_monument(title: str, include_hindi: bool = True) -> dict:
-    """Fetch a monument's Wikipedia article(s), store them and run the pipeline on each."""
+def import_monument(title: str, include_hindi: bool = True, etype: str = "monument") -> dict:
+    """Fetch a monument's (or a craft's) Wikipedia article(s), store them and run the pipeline on each."""
     article = fetch_article(title, "en")
     if not article:
         log.warning("No English Wikipedia article found for %r", title)
@@ -133,8 +133,8 @@ def import_monument(title: str, include_hindi: bool = True) -> dict:
 
     with get_conn() as conn:
         aliases = [hindi["title"]] if hindi else []
-        entity_id = matching.get_or_create(conn, article["title"], "monument", aliases)
-        if article["lat"] is not None:
+        entity_id = matching.get_or_create(conn, article["title"], etype, aliases)
+        if article["lat"] is not None and etype == "monument":
             conn.execute("update entities set lat = %s, lng = %s where id = %s and lat is null",
                          (article["lat"], article["lng"], entity_id))
 

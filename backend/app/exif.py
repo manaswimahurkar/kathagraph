@@ -59,6 +59,10 @@ def extract(data: bytes) -> dict:
         lng = _to_degrees(gps[4], gps.get(3))
         if lat is not None and lng is not None and -90 <= lat <= 90 and -180 <= lng <= 180 and (lat, lng) != (0, 0):
             result["lat"], result["lng"] = lat, lng
+    if gps and 17 in gps:  # GPSImgDirection: which way the camera faced, in degrees from north
+        heading = _clean(gps[17])
+        if heading is not None and 0 <= heading <= 360:
+            tags["GPSImgDirection"] = round(heading, 1)
 
     stamp = tags.get("DateTimeOriginal") or tags.get("DateTime")
     if isinstance(stamp, str):

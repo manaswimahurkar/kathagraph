@@ -207,3 +207,32 @@ All of these are live; the shapes above are unchanged, only extra fields were ad
 - `GET /duplicates?limit=30` → `{ pairs: [{ score, reasons, a: {id, name, aliases, lat, lng, category, n_sources, n_claims}, b: {…} }], total }`.
 - `POST /entities/{keep_id}/merge` `{ duplicate_id }` → moves facts, files, aliases, models and location onto `keep_id`, deletes the duplicate → `{ kept: {id, name}, merged }`.
 - `POST /duplicates/dismiss` `{ a, b }` → remembered as different places; never suggested again.
+
+## v1.2: built, natural and settlement sites
+
+Needs `backend/migrations/2026-11-02_site_nature.sql`.
+
+- `nature`: `"built" | "natural" | "settlement"` on every monument in `GET /entities`, `GET /entities/{id}` and `GET /priorities` rows, and on every item of `GET /timeline`.
+  - `built`: a structure people made (temples, stepwells, forts, mosques, tombs, palaces, man-made lakes and tanks, bridges).
+  - `natural`: mountains, hills, islands, natural lakes, forests, caves that weren't carved.
+  - `settlement`: towns, villages, ancient cities and cultural landscapes that contain many structures.
+- Filled from Wikidata "instance of" (P31) on import, or for all monuments with `POST /admin/classify-nature` (202). `PATCH /entities/{id}` accepts `nature`; a value set by hand is never overwritten by Wikidata.
+- `GET /timeline` → `{ monuments, undated, natural }`:
+  - each item in `monuments` and `undated` has `nature` and `date_meaning`: `"founded"` for settlements (the span is when it was founded or first settled), `"built"` otherwise;
+  - natural sites are left out of `monuments` and `undated` and listed in `natural: [{ id, name, category, nature, lat, lng }]`.
+- Checklists and `completeness` follow the kind of site:
+  - natural: exterior photo, location, protection status (`heritage_status`), sacred or historical associations (`associations`: any legend, purpose, dynasty or builder fact). No date or builder gaps and no "check the date of construction" tasks.
+  - settlement: "Date of founding" and "Founder or culture" (a `dynasty` fact counts) instead of date of construction and builder; no interior photo.
+- `POST /entities/{id}/redate` (202): reads the monument's own texts again for its date of construction (or founding for a settlement) only, never a discovery, restoration or heritage-listing year.
+
+## v1.1: translations, living heritage, digital twins
+
+Needs `backend/migrations/2026-11-02_translations_and_stories.sql`.
+
+- `GET /sources/{id}/text` → `{ source, chunks, pages: [{ page, text, language, text_en }], entities: [{ id, name, type }], embedded_photos: [{ id, filename, file_url, tag }] }`. `text_en` is a machine translation of a Hindi/Gujarati page, or null.
+- `GET /stories` → `{ stories: [{ id, story, quote, confidence, status, method, entity: { id, name, type, category }, lat, lng, precision, source: { id, filename, origin, author, url } }], places }`.
+- `GET /journeys` → `{ trails: [Journey], field: [Journey] }`, `Journey = { id, kind: "trail" | "field", title, stops: [{ id, name, lat, lng, … }], km, category?, team?, start?, end?, timed?, photos? }`.
+- `GET /crafts` → `{ crafts: [{ id, name, aliases, facts: { field: [{ value, quote, status, source_id, filename }] }, places: [{ name, lat, lng, how, precision, entity_id? }], n_sources, photos, missing }] }`.
+- `GET /entities/{id}/twin` → `{ photos, placed, coverage: [8 counts, N clockwise], sides, kinds, score, stage: "starting" | "collecting" | "ready" | "modelled", models, todo, shots: [{ id, url, tag, author, side, distance_m, heading }], target }`.
+- `GET /entities/{id}/photo-bundle` → zip of photos + `cameras.csv`.
+- Admin backfills (202): `POST /admin/translate`, `POST /admin/extract-stories`. `POST /import/wikipedia` accepts `kind: "craft"`.

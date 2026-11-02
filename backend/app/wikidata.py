@@ -43,6 +43,74 @@ class WikidataError(RuntimeError):
     pass
 
 
+# What kind of site an item is, from the English labels of its "instance of" (P31) classes.
+# Each class votes: a class that IS a settlement ("city", "village", but not "city gate") makes the
+# site a settlement; otherwise any built class ("artificial lake", "rock-cut temple") makes it built;
+# only purely natural classes ("mountain", "island") make it natural.
+_SETTLEMENT = re.compile(r"(ancient |historic |port |archaeological site of an? )?(town|village|city|human settlement|"
+                         r"settlement|cultural landscape|harappan site|indus valley civilisation site|municipality)s?")
+_BUILT = re.compile(r"\b(temple|mosque|masjid|fort|fortress|tomb|mausoleum|stepwell|building|structure|palace|"
+                    r"artificial|reservoir|dam|tank|bridge|gate|church|monastery|stupa|rock-cut|museum|memorial|"
+                    r"shrine|dargah|gurdwara|derasar|well|step well)s?\b")
+_NATURAL = re.compile(r"\b(mountain|hill|mountain range|peak|island|lake|forest|river|beach|waterfall|"
+                      r"cave|national park|wildlife sanctuary|natural|creek|bay|desert|salt marsh|wetland|grove|garden)s?\b")
+
+
+def nature_from_types(types: list[str]) -> str:
+    """'settlement', 'natural' or 'built' from the item's instance-of labels."""
+    labels_ = [t.lower().strip() for t in types]
+    if any(_SETTLEMENT.fullmatch(t) for t in labels_):
+        return "settlement"
+    if any(_BUILT.search(t) for t in labels_):
+        return "built"
+    if any(_NATURAL.search(t) for t in labels_):
+        return "natural"
+    return "built"
+
+
+def instance_of(item: dict) -> list[str]:
+    ids = []
+    for st in (item.get("claims") or {}).get("P31", []):
+        dv = ((st.get("mainsnak") or {}).get("datavalue") or {}).get("value")
+        if isinstance(dv, dict) and dv.get("id"):
+            ids.append(dv["id"])
+    if not ids:
+        return []
+    names = labels(ids)
+    return [names[i] for i in ids if i in names]
+
+
+def classify(entity_id: int, item: dict) -> str | None:
+    """Set a monument's nature from Wikidata, unless a person has already set it."""
+    types = instance_of(item)
+    if not types:
+        return None
+    nature = nature_from_types(types)
+    with get_conn() as conn:
+        conn.execute(
+            """update entities set nature = %s, nature_source = 'wikidata'
+               where id = %s and coalesce(nature_source, '') <> 'manual'""", (nature, entity_id))
+    log.info("Monument %s is %s (Wikidata: %s)", entity_id, nature, ", ".join(types))
+    return nature
+
+
+def classify_all() -> None:
+    """Classify every monument that has an imported English Wikipedia article."""
+    with get_conn() as conn:
+        ids = [r["id"] for r in conn.execute(
+            "select id from entities where type = 'monument' and coalesce(nature_source, '') <> 'manual' order by id"
+        ).fetchall()]
+    for eid in ids:
+        try:
+            with get_conn() as conn:
+                title = article_title_for(conn, eid)
+            qid = qid_for_article(title) if title else None
+            if qid:
+                classify(eid, fetch_item(qid))
+        except Exception:  # one item must not stop the rest
+            log.exception("Classifying monument %s failed", eid)
+
+
 def _get(url: str, params: dict) -> dict:
     try:
         resp = httpx.get(url, params={**params, "format": "json"}, headers={"User-Agent": USER_AGENT}, timeout=30)
@@ -299,7 +367,12 @@ def import_monument(entity_id: int, title: str | None = None, photos: bool = Tru
     qid = qid_for_article(title)
     if not qid:
         return {"entity_id": entity_id, "found": False, "reason": f"no Wikidata item for {title!r}"}
-    result = {"entity_id": entity_id, "found": True, **import_facts(entity_id, qid, fetch_item(qid))}
+    item = fetch_item(qid)
+    result = {"entity_id": entity_id, "found": True, **import_facts(entity_id, qid, item)}
+    try:
+        result["nature"] = classify(entity_id, item)
+    except WikidataError as e:
+        log.warning("Could not classify %s: %s", entity_id, e)
     result["photos"] = []
     if photos:
         for image in result.pop("images", [])[:1]:

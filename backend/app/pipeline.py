@@ -184,12 +184,23 @@ def _process(source_id: int, data: bytes, kind: str):
                 log.warning("Embedding failed for source %s: %s", source_id, e)
                 warnings.append("Meaning-based search not ready for this file (keyword search still works).")
 
+        # 4b. English translation of Hindi / Gujarati text, stored beside the original
+        if source_text.strip() and gemini.available():
+            from . import translate
+            if translate.needs_translation(source_text):
+                try:
+                    translate.translate_source(source_id)
+                except gemini.GeminiError as e:
+                    warnings.append(f"Not translated: {e}")
+
         # 5. Facts from the source's own text (never from the AI photo description)
         linked = []
         if source_text.strip() and gemini.available():
             try:
                 found = claims.extract(source_text, source["filename"])
                 linked = _save_claims(source_id, found, [c for c in chunks if not c[1].startswith("[AI")])
+                with get_conn() as conn:  # the full read already looks for legends and crafts
+                    conn.execute("update sources set stories_checked = true where id = %s", (source_id,))
             except gemini.GeminiError as e:
                 warnings.append(f"Facts not extracted: {e}")
 

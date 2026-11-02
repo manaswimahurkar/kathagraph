@@ -135,6 +135,13 @@ def _year_range(value: str) -> tuple[int, int] | None:
     if m:
         y = int(m.group(1))
         return (sign * y, sign * (y + 9)) if not bce else (-(y + 9), -y)
+    # "2650 BCE - 1450 BCE", "300 BCE - 200 CE": an era written on each side
+    m = re.search(r"\b(\d{3,4})\s*(bce|bc|ce|ad)\b\s*-\s*(\d{3,4})\s*(bce|bc|ce|ad)?\b", v)
+    if m and not vikram:
+        a_bce = m.group(2) in ("bce", "bc")
+        b_bce = m.group(4) in ("bce", "bc") if m.group(4) else a_bce
+        lo, hi = sorted((-int(m.group(1)) if a_bce else int(m.group(1)), -int(m.group(3)) if b_bce else int(m.group(3))))
+        return lo, hi
     m = re.search(r"\b(\d{3,4})\s*-\s*(\d{2,4})\b", v)
     if m:
         a, b = m.group(1), m.group(2)
@@ -219,6 +226,36 @@ def conflicts(claims: list[dict]) -> list[dict]:
     return out
 
 
+NATURES = ("built", "natural", "settlement")
+
+# A mountain has no builder and a city has no interior: each kind of site is documented differently.
+NATURAL_CHECKLIST = [
+    {"required_item": "exterior_photo", "label": "Photograph of the site"},
+    {"required_item": "location", "label": "Reliable GPS location"},
+    {"required_item": "heritage_status", "label": "Protection status"},
+    {"required_item": "associations", "label": "Sacred or historical associations"},
+]
+SETTLEMENT_LABELS = {"built_date": "Date of founding", "builder": "Founder or culture",
+                     "exterior_photo": "Photograph of the site"}
+
+
+def checklist_for(nature: str | None, checklist: list[dict]) -> list[dict]:
+    """The documentation checklist for a site, adjusted to what kind of site it is."""
+    if nature == "natural":
+        return NATURAL_CHECKLIST
+    if nature == "settlement":
+        return [{**item, "label": SETTLEMENT_LABELS.get(item["required_item"], item["label"])}
+                for item in checklist if item["required_item"] != "interior_photo"]
+    return checklist
+
+
+def field_label(field: str, nature: str | None, labels: dict[str, str]) -> str:
+    """How to name a field for this kind of site ("date of founding" for a city)."""
+    if nature == "settlement" and field in SETTLEMENT_LABELS:
+        return SETTLEMENT_LABELS[field].lower()
+    return labels.get(field, field.replace("_", " "))
+
+
 def gaps(checklist: list[dict], claims: list[dict], sources: list[dict], has_location: bool) -> list[dict]:
     """Checklist items with no evidence yet."""
     live = [c for c in claims if c["status"] != "rejected"]
@@ -229,8 +266,10 @@ def gaps(checklist: list[dict], claims: list[dict], sources: list[dict], has_loc
         "interior_photo": "interior_photo" in tags,
         "inscription": "inscription" in tags or "inscription" in fields,
         "built_date": "built_date" in fields,
-        "builder": "builder" in fields,
+        "builder": "builder" in fields or "dynasty" in fields,
         "location": has_location or "location" in fields,
+        "heritage_status": "heritage_status" in fields,
+        "associations": bool(fields & {"legend", "purpose", "dynasty", "builder"}),
     }
     return [
         {"required_item": item["required_item"], "label": item["label"]}

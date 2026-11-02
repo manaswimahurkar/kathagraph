@@ -11,6 +11,7 @@ const NAV: { href: string; label: string; short?: string }[] = [
   { href: "/search", label: "Search" },
   { href: "/ask", label: "Ask" },
   { href: "/timeline", label: "Timeline" },
+  { href: "/stories", label: "Stories & crafts", short: "Stories" },
   { href: "/next", label: "Field visits", short: "Visits" },
   { href: "/field", label: "I'm here", short: "Here" },
   { href: "/inscription", label: "Inscriptions", short: "Read" },
@@ -59,7 +60,10 @@ export default function SiteHeader() {
         >
           <ul className="flex items-center text-[14px] sm:gap-1 sm:text-[15px]">
             {NAV.map((n) => {
-              const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
+              const active =
+                n.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(n.href) || (n.href === "/stories" && /^\/(journeys|crafts)/.test(pathname));
               return (
                 <li key={n.href}>
                   <Link

@@ -164,6 +164,10 @@ function ResultCard({ result, query }: { result: SearchResult; query: string }) 
           <span className="text-ink">{result.source.filename}</span>
         )}
         {result.source.page != null && `, page ${result.source.page}`}
+        {" · "}
+        <Link href={`/source/${result.source.id}`} className="text-water underline underline-offset-2">
+          read the whole file{result.source.type !== "web" && result.source.type !== "photo" ? " (with English translation if it has one)" : ""}
+        </Link>
       </p>
     </li>
   );

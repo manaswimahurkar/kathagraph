@@ -15,7 +15,7 @@ CLAIM_STATUSES = {"unverified", "verified", "rejected"}
 
 def _entity_detail(conn, entity_id: int) -> dict | None:
     ent = conn.execute(
-        "select id, name, type, lat, lng, coord_precision from entities where id = %s", (entity_id,)
+        "select id, name, type, lat, lng, coord_precision, nature from entities where id = %s", (entity_id,)
     ).fetchone()
     if not ent:
         return None
@@ -60,9 +60,9 @@ def _entity_detail(conn, entity_id: int) -> dict | None:
            where es.entity_id = %s order by s.type, s.id""",
         (entity_id,),
     ).fetchall()
-    checklist = conn.execute(
+    checklist = analysis.checklist_for(ent["nature"], conn.execute(
         "select required_item, label from checklist_items where entity_type = %s order by id", (ent["type"],)
-    ).fetchall()
+    ).fetchall())
     gap_list = analysis.gaps(checklist, claims, sources, ent["lat"] is not None)
     return {
         **ent,
@@ -89,7 +89,7 @@ def _all_details(conn, etype: str | None) -> list[dict]:
     """Claims, sources, conflicts and gaps for many entities in 4 queries in total
     (instead of 4 per entity), so the map and the priorities page stay fast as the archive grows."""
     ents = conn.execute(
-        "select id, name, type, lat, lng, coord_precision from entities where (%s::text is null or type = %s) order by name",
+        "select id, name, type, lat, lng, coord_precision, nature from entities where (%s::text is null or type = %s) order by name",
         (etype, etype),
     ).fetchall()
     if not ents:
@@ -117,7 +117,7 @@ def _all_details(conn, etype: str | None) -> list[dict]:
     out = []
     for e in ents:
         claims, sources = claims_by[e["id"]], sources_by[e["id"]]
-        checklist = checklists.get(e["type"], [])
+        checklist = analysis.checklist_for(e["nature"], checklists.get(e["type"], []))
         gap_list = analysis.gaps(checklist, claims, sources, e["lat"] is not None)
         out.append({
             **e, "claims": claims, "sources": sources,
@@ -134,7 +134,7 @@ def list_entities(type: str | None = None):
         details = _all_details(conn, type)
     return {"entities": [
         {
-            "id": d["id"], "name": d["name"], "type": d["type"], "lat": d["lat"], "lng": d["lng"],
+            "id": d["id"], "name": d["name"], "type": d["type"], "nature": d["nature"], "lat": d["lat"], "lng": d["lng"],
             "category": models3d.category_for(d["name"]),
             "coord_precision": d["coord_precision"] or ("exact" if d["lat"] is not None else None),
             "n_sources": len(d["sources"]), "n_claims": len(d["claims"]),
@@ -158,6 +158,7 @@ FIELD_LABELS = {
     "built_date": "date of construction", "builder": "builder / patron", "dynasty": "dynasty",
     "location": "location", "architectural_style": "architectural style", "material": "material",
     "purpose": "purpose", "inscription": "inscription", "heritage_status": "heritage status",
+    "legend": "story or legend", "technique": "technique", "practitioners": "practitioners",
 }
 
 
@@ -174,9 +175,12 @@ def build_todo(detail: dict) -> list[dict]:
     if sources and all(s.get("origin") == "web" for s in sources):
         todo.append({"kind": "document", "item": "field_record",
                      "text": "No field record yet, only published references: write field notes on site"})
+    nature = detail.get("nature")
     for c in detail["conflicts"]:
+        if nature == "natural" and c["field"] in ("built_date", "builder"):
+            continue  # nobody built a mountain: nothing to check on site
         values = list(dict.fromkeys(k["value"] for k in c["claims"]))
-        label = FIELD_LABELS.get(c["field"], c["field"].replace("_", " "))
+        label = analysis.field_label(c["field"], nature, FIELD_LABELS)
         todo.append({
             "kind": "verify", "item": c["field"],
             "text": f"Check the {label} on site: sources say " + " / ".join(values),
@@ -193,7 +197,7 @@ def priorities(limit: int = 100):
         details = _all_details(conn, "monument")
     rows = [
         {
-            "id": d["id"], "name": d["name"], "lat": d["lat"], "lng": d["lng"],
+            "id": d["id"], "name": d["name"], "nature": d["nature"], "lat": d["lat"], "lng": d["lng"],
             "n_sources": len(d["sources"]), "n_gaps": len(d["gaps"]), "n_conflicts": len(d["conflicts"]),
             "completeness": d["completeness"],
             "todo": build_todo(d),
@@ -237,6 +241,7 @@ class EntityPatch(BaseModel):
     lat: float | None = Field(default=None, ge=-90, le=90)
     lng: float | None = Field(default=None, ge=-180, le=180)
     coord_precision: str | None = None
+    nature: str | None = None   # built | natural | settlement (a person's choice beats Wikidata's)
 
 
 @router.patch("/entities/{entity_id}")
@@ -249,6 +254,10 @@ def update_entity(entity_id: int, body: EntityPatch):
             matching.add_aliases(conn, entity_id, [body.name])
         if body.lat is not None and body.lng is not None:
             conn.execute("update entities set lat = %s, lng = %s where id = %s", (body.lat, body.lng, entity_id))
+        if body.nature is not None:
+            if body.nature not in analysis.NATURES:
+                raise HTTPException(400, "nature must be built, natural or settlement.")
+            conn.execute("update entities set nature = %s, nature_source = 'manual' where id = %s", (body.nature, entity_id))
         if body.coord_precision is not None:
             if body.coord_precision not in ("exact", "approximate"):
                 raise HTTPException(400, "coord_precision must be exact or approximate.")
@@ -339,12 +348,13 @@ def reprocess_one(source_id: int, background: BackgroundTasks):
 class WikiImport(BaseModel):
     titles: list[str] = Field(min_length=1, max_length=20)
     hindi: bool = True
+    kind: str = "monument"   # or "craft": a living tradition rather than a building
 
 
-def _import_all(titles: list[str], hindi: bool) -> None:
+def _import_all(titles: list[str], hindi: bool, kind: str = "monument") -> None:
     for title in titles:
         try:
-            wiki.import_monument(title, hindi)
+            wiki.import_monument(title, hindi, kind)
         except Exception:  # one failed article must not stop the rest
             wiki.log.exception("Wikipedia import failed for %r", title)
 
@@ -357,7 +367,9 @@ def import_wikipedia(body: WikiImport, background: BackgroundTasks):
     titles = [t.strip() for t in body.titles if t.strip()]
     if not titles:
         raise HTTPException(400, "Give at least one article title.")
-    background.add_task(_import_all, titles, body.hindi)
+    if body.kind not in {"monument", "craft"}:
+        raise HTTPException(400, "kind must be monument or craft.")
+    background.add_task(_import_all, titles, body.hindi, body.kind)
     return {"queued": titles}
 
 
@@ -393,6 +405,25 @@ def import_wikidata(body: WikidataImport, background: BackgroundTasks):
         raise HTTPException(400, "None of those monuments has an imported English Wikipedia article.")
     background.add_task(_import_wikidata_all, ids, body.photos)
     return {"queued": ids}
+
+
+@router.post("/admin/classify-nature", status_code=202)
+def classify_nature(background: BackgroundTasks):
+    """Mark each monument built, natural or settlement from Wikidata's "instance of"
+    (sites a person has already classified are left alone)."""
+    background.add_task(wikidata.classify_all)
+    return {"queued": True}
+
+
+@router.post("/entities/{entity_id}/redate", status_code=202)
+def redate(entity_id: int, background: BackgroundTasks):
+    """Read the monument's own texts again for its date of construction (or founding) only."""
+    from .insights import redate_entity
+    with get_conn() as conn:
+        if not conn.execute("select 1 from entities where id = %s", (entity_id,)).fetchone():
+            raise HTTPException(404, "Monument not found.")
+    background.add_task(redate_entity, entity_id)
+    return {"queued": entity_id}
 
 
 @router.post("/admin/reprocess", status_code=202)

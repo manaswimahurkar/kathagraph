@@ -368,6 +368,10 @@ function SourceCard({ c, active, refCb }: { c: AskCitation; active: boolean; ref
             </a>
           </>
         )}
+        {" · "}
+        <Link href={`/source/${c.source.id}`} className="text-water underline underline-offset-2">
+          Read in full
+        </Link>
       </p>
     </li>
   );

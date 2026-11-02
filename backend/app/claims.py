@@ -12,7 +12,10 @@ from . import gemini
 FIELDS = [
     "built_date", "builder", "dynasty", "location",
     "architectural_style", "material", "purpose", "inscription",
+    # Living heritage: stories told about a place, and how a craft is made and by whom
+    "legend", "technique", "practitioners",
 ]
+STORY_FIELDS = ["legend", "technique", "practitioners", "material", "location", "purpose"]
 # Fields where two different values from two sources = a genuine conflict.
 # "location" is left out: sources describe the same place at different levels of detail
 # ("Pavagadh" vs "Pavagadh Hill, Panchmahal") or in different scripts, and the map uses GPS anyway.
@@ -65,12 +68,34 @@ Rules:
 - Use ONLY facts explicitly stated in the text below. Never add outside knowledge, even if you know it.
 - For every claim, `quote` must be the exact words from the text that state it, copied verbatim in the original language.
 - Entity `name`: the common English name (for example "Adalaj Stepwell"), even when the text is in Hindi or Gujarati. List every other spelling or script of that name that appears in the text in `aliases`.
-- built_date: the year in CE as digits only (for example "1499"). If the text uses Vikram Samvat, convert by subtracting 57. If only a century is given, write it like "15th century".
+- built_date: when it was BUILT (for a town or ancient city: when it was founded or first settled), never the year it was discovered, excavated, restored or declared a heritage site. The year in CE as digits only (for example "1499"); BCE years as "2650 BCE". If the text uses Vikram Samvat, convert by subtracting 57. If only a century is given, write it like "15th century".
 - builder: the person who commissioned or built it, name only, without titles such as Queen, Rani, King or Sultan.
 - location: town and district, for example "Adalaj, Gandhinagar".
 - inscription: only when the text quotes or transcribes an inscription.
+- legend: a story, legend, folk tale, oral tradition or local belief about the place, retold as one plain English
+  sentence (for example "The Moon god is said to have built the first temple to be cured of a curse"). One claim per story.
+- Crafts and living traditions (embroidery, weaving, pottery, carving, painting, metalwork...) are entities of type
+  "craft". For them use: technique (how it is made), practitioners (the community, caste or families who practise it),
+  material, location (where it is practised), purpose.
 - confidence (0 to 1): how clearly the TEXT states the fact, not whether you believe it is historically true.
 - If the text contains no heritage facts, return {{"entities": []}}.
+
+Text from the file "{filename}":
+---
+{text}
+---"""
+
+STORIES_PROMPT = """You read texts from an archive of Gujarat's heritage and pull out its LIVING heritage only:
+1. Stories: legends, folk tales, myths, oral traditions and local beliefs about a monument or place.
+   Use field "legend", retold as one plain English sentence. One claim per story.
+2. Crafts and living traditions (embroidery, weaving, pottery, carving, painting, metalwork, music, festivals...)
+   as entities of type "craft", with fields technique, practitioners (community or families), material, location, purpose.
+Rules:
+- Use ONLY what the text says. Never add outside knowledge.
+- `quote` must be the exact words from the text, copied verbatim in the original language.
+- Entity `name`: the common English name of the monument, place or craft; other spellings go in `aliases`.
+- confidence (0 to 1): how clearly the TEXT states it.
+- If there are no stories or crafts, return {{"entities": []}}.
 
 Text from the file "{filename}":
 ---
@@ -110,14 +135,15 @@ def calibrate(model_confidence: float, quote: str, text: str) -> float:
     return round(min(model_confidence, cap), 2)
 
 
-def extract(text: str, filename: str) -> list[dict]:
-    """Return [{name, type, aliases, claims:[{field, value, quote, confidence}]}]."""
+def extract(text: str, filename: str, stories_only: bool = False) -> list[dict]:
+    """Return [{name, type, aliases, claims:[{field, value, quote, confidence}]}].
+    stories_only: just legends and crafts (used to backfill texts already in the archive)."""
     text = text.strip()[:MAX_TEXT]
     if len(text) < 20:
         return []
-    result = gemini.generate_json(
-        [{"text": CLAIMS_PROMPT.format(filename=filename, text=text)}], CLAIMS_SCHEMA
-    )
+    prompt = STORIES_PROMPT if stories_only else CLAIMS_PROMPT
+    allowed = STORY_FIELDS if stories_only else FIELDS
+    result = gemini.generate_json([{"text": prompt.format(filename=filename, text=text)}], CLAIMS_SCHEMA)
     entities = []
     for ent in result.get("entities", []):
         name = (ent.get("name") or "").strip()
@@ -126,7 +152,7 @@ def extract(text: str, filename: str) -> list[dict]:
         claims = []
         for c in ent.get("claims", []):
             value = str(c.get("value", "")).strip()
-            if c.get("field") in FIELDS and value:
+            if c.get("field") in allowed and value:
                 try:
                     conf = max(0.0, min(1.0, float(c.get("confidence", 0.5))))
                 except (TypeError, ValueError):

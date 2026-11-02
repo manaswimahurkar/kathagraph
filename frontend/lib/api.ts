@@ -20,6 +20,11 @@ import type {
   SearchResponse,
   SourceDetail,
   UploadResponse,
+  SourceText,
+  StoriesResponse,
+  JourneysResponse,
+  CraftsResponse,
+  TwinReport,
 } from "./types";
 import * as mock from "./mock";
 
@@ -194,6 +199,33 @@ export function markDifferent(a: number, b: number): Promise<unknown> {
 
 export function getPriorities(): Promise<PrioritiesResponse> {
   return USE_MOCK ? viaMock(() => mock.getPriorities()) : request("/priorities");
+}
+
+/** GET /sources/{id}/text: the full text of a file, page by page, with English translations. */
+export function getSourceText(id: number): Promise<SourceText> {
+  return USE_MOCK ? Promise.reject(new ApiError(NEEDS_LIVE)) : request(`/sources/${id}/text`);
+}
+
+export function getStories(): Promise<StoriesResponse> {
+  return USE_MOCK ? Promise.reject(new ApiError(NEEDS_LIVE)) : request("/stories");
+}
+
+export function getJourneys(): Promise<JourneysResponse> {
+  return USE_MOCK ? Promise.reject(new ApiError(NEEDS_LIVE)) : request("/journeys");
+}
+
+export function getCrafts(): Promise<CraftsResponse> {
+  return USE_MOCK ? Promise.reject(new ApiError(NEEDS_LIVE)) : request("/crafts");
+}
+
+/** GET /entities/{id}/twin: how ready a monument's photos are for a 3D reconstruction. */
+export function getTwin(id: number): Promise<TwinReport> {
+  return USE_MOCK ? Promise.reject(new ApiError(NEEDS_LIVE)) : request(`/entities/${id}/twin`);
+}
+
+/** A direct download link: every photo of a monument plus cameras.csv, for photogrammetry. */
+export function photoBundleUrl(id: number): string | null {
+  return USE_MOCK ? null : `${API_URL}/entities/${id}/photo-bundle`;
 }
 
 export function getSource(id: number): Promise<SourceDetail> {
