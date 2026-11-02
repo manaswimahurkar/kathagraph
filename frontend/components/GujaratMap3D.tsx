@@ -924,7 +924,7 @@ export default function GujaratMap3D({
             <p lang="gu" className={`font-gujarati text-2xl leading-none ${darkUi ? "text-[#f3dfb8]" : "text-[#2b2118]"}`}>
               ગુજરાત
             </p>
-            <p className={`mt-1 font-display text-lg tracking-[0.3em] uppercase ${darkUi ? "text-[#e8c27a]" : "text-[#6b4a1c]"}`}>Gujarat</p>
+            <p className={`kg-title mt-1 font-display text-lg tracking-[0.3em] uppercase ${darkUi ? "text-[#e8c27a]" : "text-[#6b4a1c]"}`}>Gujarat</p>
             <p className={`mt-0.5 font-serif text-[12px] italic ${darkUi ? "text-[#c9a46a]/80" : "text-[#4a3a2a]"}`}>
               Drag to turn and tilt · scroll to zoom · click a monument
             </p>

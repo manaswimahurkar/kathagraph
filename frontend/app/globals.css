@@ -15,9 +15,24 @@
   --color-rust-soft: #f4dcd3;
 
   --font-display: "Yatra One", "EB Garamond", Georgia, serif;
+  /* Page titles and the logo. Samarkan has Latin letters only: Hindi/Gujarati titles fall back to Yatra One */
+  --font-title: "Samarkan", "Yatra One", "EB Garamond", Georgia, serif;
   --font-serif: "EB Garamond", Georgia, serif;
   --font-sans: "Hind", "Hind Vadodara", system-ui, sans-serif;
   --font-gujarati: "Hind Vadodara", "Hind", sans-serif;
+}
+
+/* Samarkan by Titivillus (1993), free for personal use. Used only for the logo and page titles. */
+@font-face {
+  font-family: "Samarkan";
+  src: url("/fonts/Samarkan.ttf") format("truetype");
+  font-display: swap;
+  size-adjust: 125%; /* its letters are small: match the old title size */
+}
+h1.font-display,
+.kg-title {
+  font-family: var(--font-title);
+  letter-spacing: 0.01em;
 }
 
 html {

@@ -390,6 +390,7 @@ CONTRACT.md  API contract between frontend and backend
 - **Photos:** Wikimedia Commons, each stored with its author, licence and file page, and shown with that credit on the record.
 - **AI extraction:** Gemini reads the texts and proposes facts, legends, craft details and dates. Every one keeps the exact quote it came from, is labelled as AI-extracted and starts unverified until a person checks it on the Review page. Translations are labelled as machine translations.
 - **3D models** are embedded through Sketchfab's player and stay the property of their authors: Doron Altaratz (Adalaj, Rani ki Vav details, Jami Masjid, Sarkhej Roza, Dada Harir), CyArk (Rani ki Vav), moniln (Rudra Mahalaya, Sidi Bashir, Mahabat Maqbara), Anirban Basak (Champaner masjid) and Gandhi Ashram Sabarmati (charkha). Each is credited and linked on its record.
+- **Fonts:** Samarkan by Titivillus (logo and page titles; free for personal use, used here in a non-commercial student project); Yatra One, EB Garamond, Hind and Hind Vadodara (SIL Open Font License).
 - **Map outline:** Gujarat district boundaries from [udit-001/india-maps-data](https://github.com/udit-001/india-maps-data) (Census 2011). **Street View** and satellite views: Google Maps.
 - **Field material** uploaded through the site is credited to the contributor and cohort entered on the upload page. See [`demo-data/README.md`](demo-data/README.md) for the files the team uploaded for the demo.
 

@@ -48,7 +48,7 @@ export default function SiteHeader() {
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:px-4">
         <Link href="/" className="flex shrink-0 items-center gap-2 text-ink sm:gap-2.5">
           <StepsMark className="h-4 w-6 sm:h-5 sm:w-7" />
-          <span className="font-display text-lg leading-none tracking-wide max-[400px]:hidden sm:text-[22px]">KathaGraph</span>
+          <span className="kg-title font-display text-lg leading-none tracking-wide max-[400px]:hidden sm:text-[22px]">KathaGraph</span>
           <span lang="hi" className="hidden font-display text-base leading-none text-ochre sm:inline">
             कथा
           </span>
