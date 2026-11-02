@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from . import embeddings, office, text_extract, translate
 from .db import close_pool, get_conn, pool_stats
 from .security import require_admin, upload_limit
+from .accounts import optional_user, router as accounts_router
 from .ask import router as ask_router
 from .entities import router as entities_router
 from .insights import router as insights_router
@@ -32,6 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(accounts_router)
 app.include_router(entities_router)
 app.include_router(ask_router)
 app.include_router(insights_router)
@@ -107,6 +109,7 @@ async def upload(
     files: list[UploadFile] = File(...),
     contributor: str | None = Form(None),
     cohort: str | None = Form(None),
+    user: dict | None = Depends(optional_user),
 ):
     """Accept files (photos, PDFs, notes, CSVs, slide decks, Word reports, or a .zip folder of them),
     store them, and queue each one for processing. `contributor` and `cohort` credit whoever documented them."""
@@ -114,7 +117,9 @@ async def upload(
         raise HTTPException(400, "No files were sent.")
     if len(files) > MAX_FILES_PER_UPLOAD:
         raise HTTPException(400, f"Upload at most {MAX_FILES_PER_UPLOAD} files at a time, or put them in a .zip folder.")
-    author = credit(contributor, cohort)
+    # Signed in: the upload is credited to the account (an explicit credit on the form still wins)
+    author = credit(contributor or (user["name"] if user else None), cohort)
+    contributor_id = user["id"] if user else None
 
     # Validate everything first, so a bad file doesn't leave a half-finished upload
     batch, skipped = [], []
@@ -170,8 +175,9 @@ async def upload(
             continue
         with get_conn() as conn:
             row = conn.execute(
-                "insert into sources (type, filename, content_hash, author) values (%s, %s, %s, %s) returning id",
-                (kind, name, digest, author),
+                """insert into sources (type, filename, content_hash, author, contributor_id)
+                   values (%s, %s, %s, %s, %s) returning id""",
+                (kind, name, digest, author, contributor_id),
             ).fetchone()
         source_id = row["id"]
         seen_in_batch[digest] = source_id

@@ -242,3 +242,14 @@ Needs `backend/migrations/2026-11-02_translations_and_stories.sql`.
 - Maintenance endpoints need the header `X-Admin-Token: <ADMIN_TOKEN>` (401 without it, 403 if the server has no token set): `DELETE /sources/{id}`, `POST /sources/{id}/reprocess`, `POST /import/wikipedia`, `POST /import/wikidata`, `POST /entities/{id}/redate`, and every `/admin/*`.
 - Rate limits per client IP → `429 { detail: "Too many … requests. Try again in N s." }`: `/ask` 20/min, `/inscription/read` 10/min, `/upload` 30/min.
 - `GET /health` adds `pool: { pooled, size, available, waiting, max }`.
+
+## v1.4: contributor accounts
+
+Needs `backend/migrations/2026-11-03_accounts.sql`. Accounts are optional; every endpoint works signed out.
+
+- `POST /auth/signup` `{ name, email, password (≥8), reason? }` → `201 { token, user: { id, name, email, reason, created_at } }`; 409 if the email exists. Rate-limited (10/min per client).
+- `POST /auth/login` `{ email, password }` → `{ token, user }`; 401 "Email or password is wrong."
+- `POST /auth/logout` (Bearer) → 204.
+- `GET /me` (Bearer) → `{ user, email_verified: false, totals: { uploads, facts, verified, rejected, monuments }, uploads: [{ id, filename, type, status, created_at, n_facts, entities: [{id, name}] }], reviews: [{ id, field, value, status, reviewed_at, entity_id, entity_name }] }`; 401 when signed out. `PATCH /me` `{ name?, reason? }`.
+- Send `Authorization: Bearer <token>` on `/upload` and `PATCH /claims/{id}`: uploads get `contributor_id` (and the account name as credit if the form gives none); reviews record `reviewed_by` and `reviewed_at`.
+- Emails are only ever returned to their owner. Passwords are stored as salted scrypt hashes; only a SHA-256 of each session token is stored; sessions last 30 days.

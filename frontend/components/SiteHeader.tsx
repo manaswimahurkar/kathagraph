@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { USE_MOCK } from "@/lib/api";
 import { usePrefs } from "@/lib/prefs";
+import UserMenu from "./UserMenu";
 
 const NAV: { href: string; label: string; short?: string }[] = [
   { href: "/", label: "Map" },
@@ -121,6 +122,7 @@ export default function SiteHeader() {
             </li>
           </ul>
         </nav>
+        <UserMenu />
       </div>
       <div className="kg-frieze" aria-hidden="true" />
     </header>

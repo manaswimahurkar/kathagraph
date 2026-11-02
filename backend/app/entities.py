@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from . import analysis, matching, models3d
 from .storage import StorageError, upload_bytes
 from .db import get_conn
+from .accounts import optional_user
 from .security import require_admin
 from .pipeline import reprocess_source
 from . import wiki, wikidata
@@ -323,13 +324,15 @@ class ClaimPatch(BaseModel):
 
 
 @router.patch("/claims/{claim_id}")
-def update_claim(claim_id: int, body: ClaimPatch):
-    """A researcher marks an AI-proposed claim as verified or rejected."""
+def update_claim(claim_id: int, body: ClaimPatch, user: dict | None = Depends(optional_user)):
+    """A researcher marks an AI-proposed claim as verified or rejected (credited to them when signed in)."""
     if body.status not in CLAIM_STATUSES:
         raise HTTPException(400, "Status must be unverified, verified or rejected.")
     with get_conn() as conn:
         row = conn.execute(
-            "update claims set status = %s where id = %s returning id, status", (body.status, claim_id)
+            """update claims set status = %s, reviewed_by = %s, reviewed_at = now()
+               where id = %s returning id, status""",
+            (body.status, user["id"] if user else None, claim_id),
         ).fetchone()
     if not row:
         raise HTTPException(404, "Claim not found.")

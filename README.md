@@ -30,6 +30,20 @@ Programmes like IIT Gandhinagar's Explorer Fellowship produce a constant flow of
 
 **Design rule:** *the AI suggests; it never decides what is true.*
 
+## Why Gujarat
+
+KathaGraph starts with one state on purpose, and the site explains why at [/why-gujarat](https://kathagraph.vercel.app/why-gujarat).
+
+> **Why it matters to us.** We chose Gujarat as a nod to IIT Gandhinagar, the institute that set this challenge and gave us the opportunity to build KathaGraph. It is their state, their Explorer Fellows’ field and their question, so if this archive is useful anywhere first, it should be useful there. Working on it, we learned about stepwells, scripts and crafts we had only read about. That is what we want KathaGraph to do for everyone who opens it. (Manaswi Mahurkar and Sameehan Divekar)
+
+- **Where the question was asked.** The challenge comes from IIT Gandhinagar, whose Explorer Fellows travel across India and come home to Gujarat. Their archive should first make sense of the heritage on their doorstep, where records can be checked and revisited in person.
+- **Five thousand years in one state.** Harappan Dholavira and Lothal, Solanki stepwells, the sultanate mosques of Ahmedabad and Champaner, Somnath and Palitana: an unbroken record of how people built, prayed and found water. Four sites are UNESCO World Heritage Sites (Champaner-Pavagadh 2004, Rani ki Vav 2014, Historic City of Ahmedabad 2017, Dholavira 2021).
+- **Two scripts, one archive.** Records come in Gujarati, Hindi and English, often on the same plaque: the honest test for an archive that must read, translate and search across languages.
+- **Living heritage.** Patola, Bandhani, Ajrak, Rogan and Kutch embroidery are heritage too, and as much at risk of being lost in a folder.
+- **Deep before wide.** One state done deeply (every fact quoted, every disagreement visible, every gap turned into the next field visit) proves the idea better than thousands of thin pins.
+
+**Gujarat is the pilot, not the limit.** Nothing in the pipeline (upload, OCR, translation, fact extraction, conflicts, gaps, search, Ask, review) knows it is in Gujarat. Growing to India changes the 3D map's outline and terrain, the place list used to pin crafts and stories, and the reference articles imported per region. Rajasthan's stepwells and Maharashtra's caves are the natural next regions.
+
 ## The three innovation pathways
 
 The problem statement lists three pathways. KathaGraph combines all three on one shared evidence store.
@@ -65,6 +79,8 @@ The problem statement lists three pathways. KathaGraph combines all three on one
 | **Inscriptions** (`/inscription`) | Read and translate an inscription photo; Vikram Samvat and Shaka dates converted by fixed rules |
 | **Review** (`/review`) and **Same place?** (`/duplicates`) | Check AI facts against their passages, riskiest first; decide whether two records are one place |
 | **Stories**, **Routes**, **Crafts** (`/stories`, `/journeys`, `/crafts`) | Living heritage on the map |
+| **Join** and **My contributions** (`/join`, `/me`) | Optional contributor accounts: name, email, password and "What brought you here?"; every file you add and fact you check is credited to you and listed on your profile |
+| **Why Gujarat** (`/why-gujarat`) | Why the archive starts with one state, and how it grows to India |
 | **Upload** (`/upload`) and the file reader (`/source/{id}`) | Add photos, PDFs, notes, decks, Word reports or a zipped folder with credit; read any file in full with its English translation |
 
 ---
@@ -300,7 +316,7 @@ The prototype runs on free tiers (Render 512 MB, Supabase free, Gemini free). Th
 - KathaGraph does not run photogrammetry itself: a free server cannot. It measures coverage, plans shots and packages the photos; the model is built in Meshroom/COLMAP and uploaded back.
 - Most imported photos have no GPS, so they can't be placed around a monument; field photos taken with location on can.
 - Craft and story locations found in text use a town-level gazetteer, so they are marked approximate.
-- No login or access levels yet: anyone can upload and review, and everything uploaded is public. Only maintenance jobs are behind an admin token.
+- Accounts are optional and emails are not verified yet (the site sends no email). Anyone can upload and review; everything uploaded is public. Maintenance jobs are behind an admin token.
 - Gemini's free tier is rate-limited; large batches are slow (they retry rather than fail).
 
 ## Roadmap

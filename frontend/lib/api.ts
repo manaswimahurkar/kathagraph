@@ -27,6 +27,7 @@ import type {
   TwinReport,
 } from "./types";
 import * as mock from "./mock";
+import { authToken, setSession, type Account } from "./auth";
 
 const RAW_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").trim().replace(/\/+$/, "");
 export const USE_MOCK = RAW_URL === "" || RAW_URL.toLowerCase() === "mock";
@@ -66,7 +67,10 @@ async function request<T>(path: string, init?: RequestInit, retry = true): Promi
   const timer = setTimeout(() => controller.abort(), retry ? TIMEOUT_MS : WAKE_TIMEOUT_MS);
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, { ...init, signal: controller.signal, cache: "no-store" });
+    const token = authToken();
+    const headers = new Headers(init?.headers);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    res = await fetch(`${API_URL}${path}`, { ...init, headers, signal: controller.signal, cache: "no-store" });
   } catch (e) {
     // Only reads are retried: repeating a write (e.g. PATCH) could apply it twice
     if (retry && isRead) return request<T>(path, init, false);
@@ -75,7 +79,9 @@ async function request<T>(path: string, init?: RequestInit, retry = true): Promi
   } finally {
     clearTimeout(timer);
   }
+  if (res.status === 401 && authToken() && !path.startsWith("/auth/")) setSession(null); // expired sign-in
   if (!res.ok) throw new ApiError(await readDetail(res), res.status);
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -253,6 +259,8 @@ export function upload(
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_URL}/upload`);
+    const token = authToken();
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.timeout = 120_000;
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100));
@@ -281,4 +289,55 @@ export function upload(
     if (credit?.cohort?.trim()) form.append("cohort", credit.cohort.trim());
     xhr.send(form);
   });
+}
+
+// ---------- contributor accounts ----------
+
+export interface MyContributions {
+  user: Account;
+  email_verified: boolean;
+  totals: { uploads: number; facts: number; verified: number; rejected: number; monuments: number };
+  uploads: { id: number; filename: string; type: string; status: string; created_at: string; n_facts: number; entities: { id: number; name: string }[] }[];
+  reviews: { id: number; field: string; value: string; status: string; reviewed_at: string | null; entity_id: number; entity_name: string }[];
+}
+
+const NEEDS_ACCOUNTS = "Accounts need the live backend (set NEXT_PUBLIC_API_URL).";
+
+export async function signUp(input: { name: string; email: string; password: string; reason?: string }): Promise<Account> {
+  if (USE_MOCK) throw new ApiError(NEEDS_ACCOUNTS);
+  const r = await request<{ token: string; user: Account }>("/auth/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  setSession(r);
+  return r.user;
+}
+
+export async function signIn(email: string, password: string): Promise<Account> {
+  if (USE_MOCK) throw new ApiError(NEEDS_ACCOUNTS);
+  const r = await request<{ token: string; user: Account }>("/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  setSession(r);
+  return r.user;
+}
+
+export async function signOut(): Promise<void> {
+  try {
+    if (!USE_MOCK) await request("/auth/logout", { method: "POST" });
+  } catch {
+    /* signed out locally either way */
+  }
+  setSession(null);
+}
+
+export function getMe(): Promise<MyContributions> {
+  return USE_MOCK ? Promise.reject(new ApiError(NEEDS_ACCOUNTS)) : request("/me");
+}
+
+export function updateMe(input: { name?: string; reason?: string }): Promise<Account> {
+  return request("/me", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
 }

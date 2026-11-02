@@ -33,7 +33,10 @@ export default function HomePage() {
               </>
             ) : (
               `${entities.length - unmapped.length} ${entities.length - unmapped.length === 1 ? "monument" : "monuments"} on the map. Click one to see what the archive knows.`
-            ))}
+            ))}{" "}
+          <Link href="/why-gujarat" className="whitespace-nowrap text-water underline underline-offset-2">
+            Why Gujarat?
+          </Link>
         </p>
 
         {state.kind === "error" && (

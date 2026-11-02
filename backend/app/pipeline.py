@@ -95,7 +95,7 @@ def _save_embedded_images(source_id: int, images: list) -> list[tuple[int, bytes
     from .storage import StorageError, upload_bytes
 
     with get_conn() as conn:
-        parent = conn.execute("select author, origin from sources where id = %s", (source_id,)).fetchone()
+        parent = conn.execute("select author, origin, contributor_id from sources where id = %s", (source_id,)).fetchone()
     out = []
     for img in images:
         digest = hashlib.sha256(img.data).hexdigest()
@@ -103,9 +103,9 @@ def _save_embedded_images(source_id: int, images: list) -> list[tuple[int, bytes
             if conn.execute("select 1 from sources where content_hash = %s", (digest,)).fetchone():
                 continue
             child = conn.execute(
-                """insert into sources (type, filename, content_hash, parent_source_id, author, origin)
-                   values ('photo', %s, %s, %s, %s, %s) returning id""",
-                (img.name, digest, source_id, parent["author"], parent["origin"]),
+                """insert into sources (type, filename, content_hash, parent_source_id, author, origin, contributor_id)
+                   values ('photo', %s, %s, %s, %s, %s, %s) returning id""",
+                (img.name, digest, source_id, parent["author"], parent["origin"], parent["contributor_id"]),
             ).fetchone()["id"]
         ext = img.name.rsplit(".", 1)[-1].lower()
         try:
