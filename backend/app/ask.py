@@ -10,12 +10,13 @@ import logging
 import re
 from collections import Counter
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from . import embeddings, gemini
 from .text_extract import detect_language
 from .db import get_conn
+from .security import ask_limit
 from .entities import FIELD_LABELS, _entity_detail
 
 log = logging.getLogger("kathagraph.ask")
@@ -190,7 +191,7 @@ def clean_citations(answer: str, listed: list, n_passages: int) -> tuple[str, li
     return text.strip(), sorted(used)
 
 
-@router.post("/ask")
+@router.post("/ask", dependencies=[Depends(ask_limit)])
 def ask(body: AskIn):
     """Answer a question from the archive's own records only, with numbered citations,
     explicit disagreements and an honest list of what isn't recorded yet."""

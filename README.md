@@ -1,5 +1,7 @@
 # KathaGraph
 
+[![CI](https://github.com/manaswimahurkar/kathagraph/actions/workflows/ci.yml/badge.svg)](https://github.com/manaswimahurkar/kathagraph/actions/workflows/ci.yml)
+
 **An evidence-aware, living heritage archive for Gujarat.** KathaGraph takes what fieldwork actually produces (photos, slide decks, Word reports, scanned Hindi and Gujarati documents, field notes, whole zipped folders) and turns it into a searchable, mapped, multilingual knowledge base. Every fact links back to the exact words it came from. When sources disagree, both versions are shown. Regional-language documents are translated page by page. Legends, crafts and travel routes are plotted on the map. And each monument's photos are tracked as the raw material for a 3D digital twin.
 
 > *"What do we actually know about this place, why do we believe it, and what do we still need to record?"*
@@ -39,7 +41,7 @@ The problem statement lists three pathways. KathaGraph combines all three on one
 - **Cross-language semantic search** (Gemini embeddings + pgvector) and **cited question answering** (`/ask`) in English, Hindi or Gujarati, where every sentence of the answer cites a passage.
 
 ### 2. Geospatial / immersive web: explore the region spatially
-- **3D map of Gujarat** (Three.js) with every monument, coloured by how well documented it is.
+- **3D map of Gujarat** (Three.js) with every monument, coloured by how well documented it is, with **time travel**: drag through the centuries and monuments rise as their dates pass. Natural sites (Girnar, Bet Dwarka) stay put; ancient cities (Lothal, Dholavira) appear when they were founded.
 - **Stories & legends** (`/stories`): folklore found in the archive's texts, pinned to the place it is told about, with the original quote.
 - **Routes & journeys** (`/journeys`): field teams' real routes rebuilt from photo GPS and time stamps, plus heritage trails (stepwells, temples, forts…) in a sensible visiting order.
 - **Crafts** (`/crafts`): indigenous crafts as records of their own (technique, practitioners, materials, where they are practised), mapped from the places documents name.
@@ -49,6 +51,21 @@ The problem statement lists three pathways. KathaGraph combines all three on one
 - Each monument page has a **digital-twin panel**: a WebGL scene that hangs every photo where it was taken from (EXIF GPS and compass heading), a coverage ring showing which of the eight sides are photographed, a readiness score and plain instructions ("No photos yet from the north-west side").
 - One click downloads a **photogrammetry bundle**: every photo plus `cameras.csv` (position, heading, credit) ready for Meshroom or COLMAP.
 - Finished models (uploaded `.glb` or Sketchfab) display in an interactive **3D viewer** at the top of the record.
+
+## Feature tour
+
+| Page | What it does |
+|---|---|
+| **Map** (`/`) | 3D map of Gujarat; pins coloured by documentation health; time-travel slider; separate markers for built sites, natural sites and settlements |
+| **Monument record** (`/monument/{id}`) | Facts with their exact quotes and sources, disagreements side by side, an evidence graph, what's still missing (a checklist that fits the kind of site), a 3D model, Street View, and the 3D digital-twin panel |
+| **Search** (`/search`) | Meaning-based search across English, Hindi and Gujarati, with **voice search** |
+| **Ask** (`/ask`) | Questions answered only from the archive, every sentence cited, in English, Hindi or Gujarati |
+| **Timeline** (`/timeline`) | Every dated site in order, uncertain dates as ranges, disputed dates flagged |
+| **Field visits** (`/next`) and **I'm here** (`/field`) | What each site still needs, ranked, and the nearest sites and their gaps when you're on location |
+| **Inscriptions** (`/inscription`) | Read and translate an inscription photo; Vikram Samvat and Shaka dates converted by fixed rules |
+| **Review** (`/review`) and **Same place?** (`/duplicates`) | Check AI facts against their passages, riskiest first; decide whether two records are one place |
+| **Stories**, **Routes**, **Crafts** (`/stories`, `/journeys`, `/crafts`) | Living heritage on the map |
+| **Upload** (`/upload`) and the file reader (`/source/{id}`) | Add photos, PDFs, notes, decks, Word reports or a zipped folder with credit; read any file in full with its English translation |
 
 ---
 
@@ -270,7 +287,10 @@ The prototype runs on free tiers (Render 512 MB, Supabase free, Gemini free). Th
 - **Idempotent, resumable processing.** Duplicate files are caught by SHA-256; translation and story passes skip what is already done, so backfills can be stopped and restarted.
 - **AI behind an interface.** Gemini calls go through one client with retries, back-off and model fallback. OCR, translation or embeddings can each be swapped for a self-hosted model (e.g. a vision-transformer OCR such as TrOCR, IndicTrans2 for translation) module by module.
 - **Bounded work per request.** Uploads, zip expansion, embedded images, translated pages and photogrammetry bundles all have explicit limits; bundles are streamed through a temporary file, not held in memory.
-- **Next steps for heavy traffic:** a connection pool (`psycopg_pool` / Supabase pooler), CDN image thumbnails, and caching of the read-mostly endpoints (map, timeline, stories).
+- **Shared database connections.** A connection pool (`psycopg_pool`, `DB_POOL_MAX` per instance) lends out a few long-lived connections instead of opening one per request, so a burst of visitors waits a moment rather than exhausting Supabase's connection limit. Dead connections are detected and replaced; `/health` reports the pool's state.
+- **Protected and rate-limited.** Maintenance jobs (re-processing, imports, backfills, deleting files) need an admin token and are switched off when none is configured. The AI endpoints (`/ask`, `/inscription/read`, `/upload`) are rate-limited per client, so one visitor can't use up the AI quota for everyone.
+- **Tested on every push.** GitHub Actions runs the backend tests (with Tesseract installed) and type-checks and builds the frontend.
+- **Next steps for heavy traffic:** move the in-process worker to a real job queue with separate workers, move rate-limit counters to Redis when there are several instances, serve image thumbnails from a CDN, and cache the read-mostly endpoints (map, timeline, stories).
 
 ## Limitations (honest)
 
@@ -280,7 +300,7 @@ The prototype runs on free tiers (Render 512 MB, Supabase free, Gemini free). Th
 - KathaGraph does not run photogrammetry itself: a free server cannot. It measures coverage, plans shots and packages the photos; the model is built in Meshroom/COLMAP and uploaded back.
 - Most imported photos have no GPS, so they can't be placed around a monument; field photos taken with location on can.
 - Craft and story locations found in text use a town-level gazetteer, so they are marked approximate.
-- No login or access levels yet, so admin jobs are open and everything uploaded is public.
+- No login or access levels yet: anyone can upload and review, and everything uploaded is public. Only maintenance jobs are behind an admin token.
 - Gemini's free tier is rate-limited; large batches are slow (they retry rather than fail).
 
 ## Roadmap
@@ -320,6 +340,7 @@ Fill in `.env`:
 | `SUPABASE_SERVICE_KEY` | Supabase → Project Settings → API Keys → `service_role` (**secret**) |
 | `SUPABASE_BUCKET` | `archive` |
 | `GEMINI_API_KEY` | aistudio.google.com → Get API key |
+| `ADMIN_TOKEN` | Any long random string; send it as the `X-Admin-Token` header to run admin jobs and imports |
 
 Open http://localhost:8000/health → `{"ok":true,"db":true,"pgvector":true}`.
 OCR needs Tesseract with Gujarati and Hindi data (`tesseract-ocr-guj`, `tesseract-ocr-hin`); both are in the Docker image. Without them OCR is skipped with a clear message.
@@ -336,10 +357,10 @@ Open http://localhost:3000. With `NEXT_PUBLIC_API_URL=mock` the site runs on cle
 ### 4. Seed it (optional)
 With the backend running, import reference articles and let the backfills run:
 ```bash
-curl -X POST localhost:8000/import/wikipedia -H "Content-Type: application/json" -d "{\"titles\":[\"Adalaj Stepwell\",\"Rani ki vav\"]}"
-curl -X POST localhost:8000/import/wikipedia -H "Content-Type: application/json" -d "{\"titles\":[\"Patola\",\"Ajrakh\",\"Rogan art\"],\"kind\":\"craft\"}"
-curl -X POST localhost:8000/admin/extract-stories
-curl -X POST localhost:8000/admin/translate
+curl -X POST localhost:8000/import/wikipedia -H "X-Admin-Token: $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"titles\":[\"Adalaj Stepwell\",\"Rani ki vav\"]}"
+curl -X POST localhost:8000/import/wikipedia -H "X-Admin-Token: $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"titles\":[\"Patola\",\"Ajrakh\",\"Rogan art\"],\"kind\":\"craft\"}"
+curl -X POST localhost:8000/admin/extract-stories -H "X-Admin-Token: $ADMIN_TOKEN"
+curl -X POST localhost:8000/admin/translate -H "X-Admin-Token: $ADMIN_TOKEN"
 ```
 
 ### 5. Tests
@@ -348,7 +369,7 @@ cd backend
 pip install -r requirements-dev.txt
 python -m pytest
 ```
-About 100 unit tests (150+ cases) cover name matching across scripts, conflict and date logic (BCE, Vikram Samvat, regnal names), text and slide-deck extraction, EXIF, the review-risk score, duplicate detection, citations, translation triggers, place finding, journeys and digital-twin coverage.
+About 110 unit tests (160+ cases) cover name matching across scripts, conflict and date logic (BCE, Vikram Samvat, regnal names), text and slide-deck extraction, EXIF, the review-risk score, duplicate detection, citations, translation triggers, place finding, journeys and digital-twin coverage.
 
 ## Deploy
 - **Backend:** Render → New Web Service → this repo, root `backend`, runtime **Docker**, with the variables above (`CORS_ORIGINS` including the Vercel URL).
@@ -362,4 +383,13 @@ frontend/    Next.js app: app/ (pages), components/ (map, 3D, graph), lib/ (API 
 CONTRACT.md  API contract between frontend and backend
 ```
 
-*Reference material is imported from Wikipedia, Wikidata and Wikimedia Commons under their open licences and credited on every record. Field material is credited to its contributors.*
+## Where the data comes from, and credits
+
+- **Text:** English and Hindi Wikipedia articles (CC BY-SA 4.0, "Wikipedia contributors"), imported with their URL and stored as published references, never as field records.
+- **Structured facts:** Wikidata statements (CC0): inception, architect or patron, style, material, heritage status, coordinates, and "instance of" for built / natural / settlement.
+- **Photos:** Wikimedia Commons, each stored with its author, licence and file page, and shown with that credit on the record.
+- **AI extraction:** Gemini reads the texts and proposes facts, legends, craft details and dates. Every one keeps the exact quote it came from, is labelled as AI-extracted and starts unverified until a person checks it on the Review page. Translations are labelled as machine translations.
+- **3D models** are embedded through Sketchfab's player and stay the property of their authors: Doron Altaratz (Adalaj, Rani ki Vav details, Jami Masjid, Sarkhej Roza, Dada Harir), CyArk (Rani ki Vav), moniln (Rudra Mahalaya, Sidi Bashir, Mahabat Maqbara), Anirban Basak (Champaner masjid) and Gandhi Ashram Sabarmati (charkha). Each is credited and linked on its record.
+- **Map outline:** Gujarat district boundaries from [udit-001/india-maps-data](https://github.com/udit-001/india-maps-data) (Census 2011). **Street View** and satellite views: Google Maps.
+- **Field material** uploaded through the site is credited to the contributor and cohort entered on the upload page. See [`demo-data/README.md`](demo-data/README.md) for the files the team uploaded for the demo.
+

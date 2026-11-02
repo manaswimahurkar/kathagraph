@@ -235,4 +235,10 @@ Needs `backend/migrations/2026-11-02_translations_and_stories.sql`.
 - `GET /crafts` → `{ crafts: [{ id, name, aliases, facts: { field: [{ value, quote, status, source_id, filename }] }, places: [{ name, lat, lng, how, precision, entity_id? }], n_sources, photos, missing }] }`.
 - `GET /entities/{id}/twin` → `{ photos, placed, coverage: [8 counts, N clockwise], sides, kinds, score, stage: "starting" | "collecting" | "ready" | "modelled", models, todo, shots: [{ id, url, tag, author, side, distance_m, heading }], target }`.
 - `GET /entities/{id}/photo-bundle` → zip of photos + `cameras.csv`.
-- Admin backfills (202): `POST /admin/translate`, `POST /admin/extract-stories`. `POST /import/wikipedia` accepts `kind: "craft"`.
+- Admin backfills (202): `POST /admin/translate`, `POST /admin/extract-stories` (`?recheck_crafts=true` reads craft articles again). `POST /import/wikipedia` accepts `kind: "craft"`.
+
+## v1.3: admin token and rate limits
+
+- Maintenance endpoints need the header `X-Admin-Token: <ADMIN_TOKEN>` (401 without it, 403 if the server has no token set): `DELETE /sources/{id}`, `POST /sources/{id}/reprocess`, `POST /import/wikipedia`, `POST /import/wikidata`, `POST /entities/{id}/redate`, and every `/admin/*`.
+- Rate limits per client IP → `429 { detail: "Too many … requests. Try again in N s." }`: `/ask` 20/min, `/inscription/read` 10/min, `/upload` 30/min.
+- `GET /health` adds `pool: { pooled, size, available, waiting, max }`.

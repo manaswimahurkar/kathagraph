@@ -31,6 +31,8 @@ def compare(a: dict, b: dict) -> tuple[float, list[str]] | None:
     ca, cb = models3d.category_for(a["name"]), models3d.category_for(b["name"])
     if ca != cb and "site" not in (ca, cb):
         return None  # a cave and a fort at the same hill are two structures, not one
+    if (a.get("nature") or "built") != (b.get("nature") or "built"):
+        return None  # a town and its fort, or a lake and a temple on its shore, are not one place
     both_exact = all(x["lat"] is not None and x.get("coord_precision") != "approximate" for x in (a, b))
     km = matching.distance_km(a["lat"], a["lng"], b["lat"], b["lng"]) if both_exact else None
     if km is not None and km > FAR_KM:
@@ -59,8 +61,8 @@ def duplicates(limit: int = 30):
     """Pairs of monuments that may be the same place, most likely first."""
     with get_conn() as conn:
         ents = [e for e in matching._all_entities(conn) if e["type"] == "monument"]
-        precision = {r["id"]: r["coord_precision"] for r in conn.execute(
-            "select id, coord_precision from entities where type = 'monument'").fetchall()}
+        extra = {r["id"]: r for r in conn.execute(
+            "select id, coord_precision, nature from entities where type = 'monument'").fetchall()}
         counts = {r["id"]: r for r in conn.execute(
             """select e.id,
                       (select count(*) from entity_sources es where es.entity_id = e.id) as n_sources,
@@ -68,7 +70,8 @@ def duplicates(limit: int = 30):
                from entities e where e.type = 'monument'""").fetchall()}
         dismissed = {(r["a"], r["b"]) for r in conn.execute("select a, b from entity_not_same").fetchall()}
     for e in ents:
-        e["coord_precision"] = precision.get(e["id"])
+        e["coord_precision"] = (extra.get(e["id"]) or {}).get("coord_precision")
+        e["nature"] = (extra.get(e["id"]) or {}).get("nature")
     pairs = []
     for a, b in combinations(ents, 2):
         if (min(a["id"], b["id"]), max(a["id"], b["id"])) in dismissed:

@@ -1,10 +1,11 @@
 """API routes for monuments (entities), their claims, conflicts and gaps."""
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from . import analysis, matching, models3d
 from .storage import StorageError, upload_bytes
 from .db import get_conn
+from .security import require_admin
 from .pipeline import reprocess_source
 from . import wiki, wikidata
 
@@ -335,7 +336,7 @@ def update_claim(claim_id: int, body: ClaimPatch):
     return row
 
 
-@router.post("/sources/{source_id}/reprocess", status_code=202)
+@router.post("/sources/{source_id}/reprocess", status_code=202, dependencies=[Depends(require_admin)])
 def reprocess_one(source_id: int, background: BackgroundTasks):
     with get_conn() as conn:
         if not conn.execute("select 1 from sources where id = %s", (source_id,)).fetchone():
@@ -359,7 +360,7 @@ def _import_all(titles: list[str], hindi: bool, kind: str = "monument") -> None:
             wiki.log.exception("Wikipedia import failed for %r", title)
 
 
-@router.post("/import/wikipedia", status_code=202)
+@router.post("/import/wikipedia", status_code=202, dependencies=[Depends(require_admin)])
 def import_wikipedia(body: WikiImport, background: BackgroundTasks):
     """Import published reference text (English + Hindi Wikipedia) for monuments by article title.
     Each article is stored with its attribution and licence, processed like any upload,
@@ -387,7 +388,7 @@ def _import_wikidata_all(entity_ids: list[int], photos: bool) -> None:
             wikidata.log.exception("Wikidata import failed for monument %s", eid)
 
 
-@router.post("/import/wikidata", status_code=202)
+@router.post("/import/wikidata", status_code=202, dependencies=[Depends(require_admin)])
 def import_wikidata(body: WikidataImport, background: BackgroundTasks):
     """Structured facts from Wikidata (built date, architect / patron, heritage status, style, material,
     coordinates) and the item's main photo from Wikimedia Commons, for monuments that have an imported
@@ -407,7 +408,7 @@ def import_wikidata(body: WikidataImport, background: BackgroundTasks):
     return {"queued": ids}
 
 
-@router.post("/admin/classify-nature", status_code=202)
+@router.post("/admin/classify-nature", status_code=202, dependencies=[Depends(require_admin)])
 def classify_nature(background: BackgroundTasks):
     """Mark each monument built, natural or settlement from Wikidata's "instance of"
     (sites a person has already classified are left alone)."""
@@ -415,7 +416,7 @@ def classify_nature(background: BackgroundTasks):
     return {"queued": True}
 
 
-@router.post("/entities/{entity_id}/redate", status_code=202)
+@router.post("/entities/{entity_id}/redate", status_code=202, dependencies=[Depends(require_admin)])
 def redate(entity_id: int, background: BackgroundTasks):
     """Read the monument's own texts again for its date of construction (or founding) only."""
     from .insights import redate_entity
@@ -426,7 +427,7 @@ def redate(entity_id: int, background: BackgroundTasks):
     return {"queued": entity_id}
 
 
-@router.post("/admin/reprocess", status_code=202)
+@router.post("/admin/reprocess", status_code=202, dependencies=[Depends(require_admin)])
 def reprocess_all(background: BackgroundTasks):
     """Run the full pipeline again on every stored file (one at a time)."""
     with get_conn() as conn:

@@ -19,10 +19,11 @@ from collections import defaultdict
 from datetime import timedelta
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from . import claims, gemini, models3d, places, text_extract
 from .db import get_conn
+from .security import require_admin
 from .matching import distance_km
 
 log = logging.getLogger("kathagraph.living")
@@ -131,11 +132,16 @@ def extract_stories_backfill() -> None:
             log.exception("Stories pass on source %s failed", sid)
 
 
-@router.post("/admin/extract-stories", status_code=202)
-def extract_stories(background: BackgroundTasks):
-    """Find legends and crafts in every text already in the archive (each file is read once)."""
+@router.post("/admin/extract-stories", status_code=202, dependencies=[Depends(require_admin)])
+def extract_stories(background: BackgroundTasks, recheck_crafts: bool = False):
+    """Find legends and crafts in every text already in the archive (each file is read once).
+    recheck_crafts: also read again the articles imported for crafts, for technique, makers and places."""
     if not gemini.available():
         raise HTTPException(503, "The AI service is not configured.")
+    if recheck_crafts:
+        with get_conn() as conn:
+            conn.execute("""update sources set stories_checked = false
+                            where entity_id in (select id from entities where type = 'craft')""")
     background.add_task(extract_stories_backfill)
     return {"queued": True}
 
@@ -253,7 +259,17 @@ def crafts():
             (ids,)).fetchall()
         sources = conn.execute(
             "select entity_id, count(*) as n from entity_sources where entity_id = any(%s) group by entity_id", (ids,)).fetchall()
+        # The places each craft's own documents name (its Wikipedia article, field notes about it)
+        texts = conn.execute(
+            """select es.entity_id, s.filename, string_agg(ch.text, ' ') as text
+               from entity_sources es join sources s on s.id = es.source_id join chunks ch on ch.source_id = s.id
+               where es.entity_id = any(%s) and s.type <> 'photo' and ch.text not like '[AI%%' and ch.language = 'en'
+               group by es.entity_id, s.filename""", (ids,)).fetchall()
     n_sources = {r["entity_id"]: r["n"] for r in sources}
+    named: dict[int, list[dict]] = defaultdict(list)
+    for t in texts:
+        for p in places.find_places(t["text"])[:8]:
+            named[t["entity_id"]].append({**p, "how": f"named in “{t['filename']}”"})
     out = []
     for e in ents:
         f = [x for x in facts if x["entity_id"] == e["id"]]
@@ -268,6 +284,7 @@ def crafts():
         for x in by_field.get("location", []):
             for p in places.find_places(x["value"]):
                 where.append({**p, "how": f"named in “{x['filename']}”"})
+        where.extend(named.get(e["id"], []))
         for p in photos:
             if p["entity_id"] == e["id"] and p["lat"] is not None:
                 where.append({"name": "Field photo", "lat": p["lat"], "lng": p["lng"], "how": "photo GPS", "precision": "exact"})

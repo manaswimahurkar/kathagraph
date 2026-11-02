@@ -20,6 +20,7 @@ def test_nature_from_wikidata_instance_of():
     assert nature_from_types(["archaeological site", "ancient city"]) == "settlement"
     assert nature_from_types(["village", "fort"]) == "settlement"
     assert nature_from_types(["stepwell"]) == "built"
+    assert nature_from_types(["cave"]) == "built"                 # Gujarat's caves are rock-cut
     assert nature_from_types([]) == "built"
 
 

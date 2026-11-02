@@ -46,14 +46,15 @@ class WikidataError(RuntimeError):
 # What kind of site an item is, from the English labels of its "instance of" (P31) classes.
 # Each class votes: a class that IS a settlement ("city", "village", but not "city gate") makes the
 # site a settlement; otherwise any built class ("artificial lake", "rock-cut temple") makes it built;
-# only purely natural classes ("mountain", "island") make it natural.
+# only purely natural classes ("mountain", "island") make it natural. Caves count as built: in
+# Gujarat they are almost all rock-cut (Talaja, Khambhalida), and Wikidata often just says "cave".
 _SETTLEMENT = re.compile(r"(ancient |historic |port |archaeological site of an? )?(town|village|city|human settlement|"
                          r"settlement|cultural landscape|harappan site|indus valley civilisation site|municipality)s?")
 _BUILT = re.compile(r"\b(temple|mosque|masjid|fort|fortress|tomb|mausoleum|stepwell|building|structure|palace|"
                     r"artificial|reservoir|dam|tank|bridge|gate|church|monastery|stupa|rock-cut|museum|memorial|"
                     r"shrine|dargah|gurdwara|derasar|well|step well)s?\b")
 _NATURAL = re.compile(r"\b(mountain|hill|mountain range|peak|island|lake|forest|river|beach|waterfall|"
-                      r"cave|national park|wildlife sanctuary|natural|creek|bay|desert|salt marsh|wetland|grove|garden)s?\b")
+                      r"national park|wildlife sanctuary|natural|creek|bay|desert|salt marsh|wetland|grove|garden)s?\b")
 
 
 def nature_from_types(types: list[str]) -> str:

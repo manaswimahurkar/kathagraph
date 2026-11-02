@@ -2,19 +2,14 @@
 
 Files for the hackathon demo, uploaded through the site so the real pipeline (EXIF/GPS, OCR, embeddings, claim extraction) processes them.
 
-**Field notes marked "DEMO FIELD NOTE" were written by the team from public sources.** They are not original site visits.
-Two notes per monument deliberately record a detail that sources genuinely disagree on, so the conflict view has real material to show:
+Only openly licensed photos from Wikimedia Commons are here. The team-written demo field notes and the typed Hindi note image used during development have been removed from the archive and from this folder, so every fact on the live site traces to a real published source. The disagreements the site shows (for example Adalaj built in 1498 or 1499) come from English and Hindi Wikipedia disagreeing, not from anything the team wrote.
 
-- **Adalaj Stepwell:** construction year 1498 vs 1499 (the inscription is dated Samvat 1555, which converts to 1498 or 1499 depending on the calendar used).
-- **Rani ki Vav:** completed by Queen Udayamati around 1063 as a memorial (the account traced to the Prabandha Chintamani) vs started around 1050 under King Bhima I (as told in popular accounts online).
+These photos are stored in the archive as **published references** (`origin: web`) with their author, licence and Commons page, not as the team's own field records.
 
 ## Files and credits
 
 | File | Monument | Source | Licence |
 |---|---|---|---|
-| `ranikivav/demo_ranikivav_fieldnote_A.txt` | Rani ki Vav | Team, from public sources | CC0 |
-| `ranikivav/demo_ranikivav_fieldnote_B.txt` | Rani ki Vav | Team, summarising popular accounts found online | CC0 |
-| `adalaj/adalaj_stepwell_hindi_fieldnote.png` | Adalaj Stepwell | Team: a short Hindi note typed in our own words and saved as an image, to test Hindi OCR | CC0 |
 | `adalaj/adalaj_stepwell_exterior.jpg` | Adalaj Stepwell | [Commons: 0082423 Rudabai Step Well, Adalaj Gujarat 146.jpg](https://commons.wikimedia.org/wiki/File:0082423_Rudabai_Step_Well,_Adalaj_Gujarat_146.jpg), Ms Sarah Welch | CC0 |
 | `adalaj/adalaj_stepwell_carving.jpg` | Adalaj Stepwell | [Commons: Adalaj Stepwell side panel 2.jpg](https://commons.wikimedia.org/wiki/File:Adalaj_Stepwell_side_panel_2.jpg), Ratnesh1948 | CC BY-SA 4.0 |
 | `ranikivav/rani_ki_vav_exterior.jpg` | Rani ki Vav | [Commons: Rani Ki Vav - World Heritage Site - Patan, Gujarat.jpg](https://commons.wikimedia.org/wiki/File:Rani_Ki_Vav_-_World_Heritage_Site_-_Patan,_Gujarat.jpg), K1tri | CC BY-SA 4.0 |

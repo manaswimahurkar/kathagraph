@@ -4,12 +4,13 @@ import mimetypes
 import os
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import embeddings, office, text_extract, translate
-from .db import get_conn
+from .db import close_pool, get_conn, pool_stats
+from .security import require_admin, upload_limit
 from .ask import router as ask_router
 from .entities import router as entities_router
 from .insights import router as insights_router
@@ -36,6 +37,11 @@ app.include_router(ask_router)
 app.include_router(insights_router)
 app.include_router(merge_router)
 app.include_router(living_router)
+
+
+@app.on_event("shutdown")
+def shutdown():
+    close_pool()
 
 
 @app.on_event("startup")
@@ -90,12 +96,12 @@ def health():
             row = conn.execute(
                 "select exists(select 1 from pg_extension where extname = 'vector') as has_vector"
             ).fetchone()
-        return {"ok": True, "db": True, "pgvector": row["has_vector"]}
+        return {"ok": True, "db": True, "pgvector": row["has_vector"], "pool": pool_stats()}
     except Exception as e:  # report DB problems instead of crashing
         return {"ok": True, "db": False, "error": str(e)}
 
 
-@app.post("/upload", status_code=202)
+@app.post("/upload", status_code=202, dependencies=[Depends(upload_limit)])
 async def upload(
     background: BackgroundTasks,
     files: list[UploadFile] = File(...),
@@ -202,7 +208,7 @@ def get_source(source_id: int):
     return row
 
 
-@app.delete("/sources/{source_id}")
+@app.delete("/sources/{source_id}", dependencies=[Depends(require_admin)])
 def delete_source(source_id: int):
     """Remove a file and everything extracted from it (text, claims, links)."""
     with get_conn() as conn:
@@ -249,7 +255,7 @@ def get_source_text(source_id: int):
     return {"source": src, "chunks": chunks, "pages": pages, "entities": entities, "embedded_photos": children}
 
 
-@app.post("/admin/translate", status_code=202)
+@app.post("/admin/translate", status_code=202, dependencies=[Depends(require_admin)])
 def translate_all(background: BackgroundTasks):
     """Translate every stored Hindi or Gujarati document that has no English translation yet."""
     background.add_task(translate.backfill)
@@ -350,7 +356,7 @@ def search(q: str, limit: int = 10):
     }
 
 
-@app.post("/admin/rechunk")
+@app.post("/admin/rechunk", dependencies=[Depends(require_admin)])
 def rechunk(after_id: int = 0, batch: int = 5):
     """Re-split stored text with the current chunker (passages start and end on whole words).
     Works through files in id order, `batch` at a time; call again with the returned `next_after_id`
@@ -372,7 +378,7 @@ def rechunk(after_id: int = 0, batch: int = 5):
             "failed": failed, "next_after_id": ids[-1] if len(ids) == batch else None}
 
 
-@app.post("/admin/reindex")
+@app.post("/admin/reindex", dependencies=[Depends(require_admin)])
 def reindex():
     """Build search vectors for any text that doesn't have one yet
     (e.g. files uploaded before the Gemini key was added)."""

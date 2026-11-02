@@ -9,11 +9,12 @@ import logging
 import re
 from collections import Counter, defaultdict
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from . import analysis, gemini, models3d
 from .claims import quote_in_source
 from .db import get_conn
+from .security import inscription_limit
 from .entities import FIELD_LABELS
 
 log = logging.getLogger("kathagraph.insights")
@@ -310,7 +311,7 @@ def to_common_era(calendar: str, year: int | None) -> tuple[int, int] | None:
     return None
 
 
-@router.post("/inscription/read")
+@router.post("/inscription/read", dependencies=[Depends(inscription_limit)])
 async def read_inscription(file: UploadFile = File(...)):
     """An AI reading of an inscription photo, for a reviewer to check against the stone. Nothing is stored:
     to keep it, upload the photo to the archive, where it is OCR'd and linked like any other file."""
