@@ -229,6 +229,11 @@ export function getTwin(id: number): Promise<TwinReport> {
   return USE_MOCK ? Promise.reject(new ApiError(NEEDS_LIVE)) : request(`/entities/${id}/twin`);
 }
 
+/** The full backend URL of an API path (null with demo data). */
+export function apiUrl(path: string): string | null {
+  return USE_MOCK ? null : `${API_URL}${path}`;
+}
+
 /** A direct download link: every photo of a monument plus cameras.csv, for photogrammetry. */
 export function photoBundleUrl(id: number): string | null {
   return USE_MOCK ? null : `${API_URL}/entities/${id}/photo-bundle`;

@@ -207,3 +207,41 @@ def update_me(body: ProfilePatch, user: dict = Depends(require_user)):
             conn.execute("update users set reason = %s where id = %s", (body.reason.strip() or None, user["id"]))
         row = conn.execute("select id, name, email, reason, created_at from users where id = %s", (user["id"],)).fetchone()
     return _public(row)
+
+
+# ---------- admin view of the archive ----------
+
+from .security import require_admin  # noqa: E402  (kept beside the admin view it guards)
+
+
+@router.get("/admin/status", dependencies=[Depends(require_admin)])
+def admin_status():
+    """Everything an archive keeper needs at a glance: files by status (failed ones with their
+    error), facts by review status, monuments by kind, and the contributors who have joined."""
+    with get_conn() as conn:
+        files = {r["status"]: r["n"] for r in conn.execute(
+            "select status, count(*) as n from sources group by status").fetchall()}
+        kinds = {r["type"]: r["n"] for r in conn.execute(
+            "select type, count(*) as n from sources group by type").fetchall()}
+        failed = conn.execute(
+            """select id, filename, type, error, created_at from sources
+               where status = 'failed' order by id desc limit 50""").fetchall()
+        waiting = conn.execute(
+            """select id, filename, type, status, created_at from sources
+               where status in ('pending', 'processing') order by id limit 50""").fetchall()
+        facts = {r["status"]: r["n"] for r in conn.execute(
+            "select status, count(*) as n from claims group by status").fetchall()}
+        entities = {r["k"]: r["n"] for r in conn.execute(
+            """select case when type = 'monument' then coalesce(nature, 'built') else type end as k, count(*) as n
+               from entities group by 1""").fetchall()}
+        translated = conn.execute("select count(distinct source_id) as n from translations").fetchone()["n"]
+        users = conn.execute(
+            """select u.id, u.name, u.email, u.reason, u.created_at,
+                      (select count(*) from sources s where s.contributor_id = u.id) as uploads,
+                      (select count(*) from claims c where c.reviewed_by = u.id) as reviews
+               from users u order by u.id desc limit 100""").fetchall()
+        recent = conn.execute(
+            """select s.id, s.filename, s.type, s.status, s.origin, s.author, s.created_at
+               from sources s order by s.id desc limit 15""").fetchall()
+    return {"files": files, "file_types": kinds, "failed": failed, "waiting": waiting, "facts": facts,
+            "entities": entities, "translated_sources": translated, "users": users, "recent": recent}

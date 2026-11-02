@@ -253,3 +253,8 @@ Needs `backend/migrations/2026-11-03_accounts.sql`. Accounts are optional; every
 - `GET /me` (Bearer) → `{ user, email_verified: false, totals: { uploads, facts, verified, rejected, monuments }, uploads: [{ id, filename, type, status, created_at, n_facts, entities: [{id, name}] }], reviews: [{ id, field, value, status, reviewed_at, entity_id, entity_name }] }`; 401 when signed out. `PATCH /me` `{ name?, reason? }`.
 - Send `Authorization: Bearer <token>` on `/upload` and `PATCH /claims/{id}`: uploads get `contributor_id` (and the account name as credit if the form gives none); reviews record `reviewed_by` and `reviewed_at`.
 - Emails are only ever returned to their owner. Passwords are stored as salted scrypt hashes; only a SHA-256 of each session token is stored; sessions last 30 days.
+
+## v1.5: admin console
+
+- `GET /admin/status` (X-Admin-Token) → `{ files: {status: n}, file_types: {type: n}, failed: [{id, filename, type, error, created_at}], waiting: [...], facts: {status: n}, entities: {built|natural|settlement|craft|…: n}, translated_sources, users: [{id, name, email, reason, created_at, uploads, reviews}], recent: [...] }`.
+- The `/admin` page uses it plus the existing admin endpoints; the token is kept in sessionStorage for the tab only.

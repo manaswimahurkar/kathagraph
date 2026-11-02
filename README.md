@@ -80,6 +80,7 @@ The problem statement lists three pathways. KathaGraph combines all three on one
 | **Review** (`/review`) and **Same place?** (`/duplicates`) | Check AI facts against their passages, riskiest first; decide whether two records are one place |
 | **Stories**, **Routes**, **Crafts** (`/stories`, `/journeys`, `/crafts`) | Living heritage on the map |
 | **Join** and **My contributions** (`/join`, `/me`) | Optional contributor accounts: name, email, password and "What brought you here?"; every file you add and fact you check is credited to you and listed on your profile |
+| **Admin** (`/admin`) | Locked by the admin token: archive health, one-click maintenance jobs, failed files (read again or delete), Wikipedia imports, fixing one record, and the contributor list |
 | **Why Gujarat** (`/why-gujarat`) | Why the archive starts with one state, and how it grows to India |
 | **Upload** (`/upload`) and the file reader (`/source/{id}`) | Add photos, PDFs, notes, decks, Word reports or a zipped folder with credit; read any file in full with its English translation |
 
@@ -316,7 +317,7 @@ The prototype runs on free tiers (Render 512 MB, Supabase free, Gemini free). Th
 - KathaGraph does not run photogrammetry itself: a free server cannot. It measures coverage, plans shots and packages the photos; the model is built in Meshroom/COLMAP and uploaded back.
 - Most imported photos have no GPS, so they can't be placed around a monument; field photos taken with location on can.
 - Craft and story locations found in text use a town-level gazetteer, so they are marked approximate.
-- Accounts are optional and emails are not verified yet (the site sends no email). Anyone can upload and review; everything uploaded is public. Maintenance jobs are behind an admin token.
+- Accounts are optional and emails are not verified yet (the site sends no email). Anyone can upload and review; everything uploaded is public. Maintenance jobs are behind an admin token, run from the `/admin` page.
 - Gemini's free tier is rate-limited; large batches are slow (they retry rather than fail).
 
 ## Roadmap
