@@ -80,6 +80,11 @@ def stories():
                where c.field = 'legend' and c.status <> 'rejected'
                order by e.name, c.id"""
         ).fetchall()
+        thumbs = {r["entity_id"]: r for r in conn.execute(
+            """select distinct on (es.entity_id) es.entity_id, s.file_url, s.author, s.licence
+               from entity_sources es join sources s on s.id = es.source_id
+               where s.type = 'photo' and s.status = 'done' and s.file_url is not null
+               order by es.entity_id, (coalesce(es.tag, s.tag) = 'exterior_photo') desc, s.id""").fetchall()}
     out = []
     for r in rows:
         lat, lng, precision = r["lat"], r["lng"], "exact"
@@ -93,6 +98,8 @@ def stories():
             "entity": {"id": r["entity_id"], "name": r["entity_name"], "type": r["entity_type"],
                        "category": models3d.category_for(r["entity_name"])},
             "lat": lat, "lng": lng, "precision": precision if lat is not None else None,
+            "photo": ({"url": thumbs[r["entity_id"]]["file_url"], "author": thumbs[r["entity_id"]]["author"],
+                       "licence": thumbs[r["entity_id"]]["licence"]} if r["entity_id"] in thumbs else None),
             "source": {"id": r["source_id"], "filename": r["filename"], "origin": r["origin"],
                        "author": r["author"], "url": r["source_url"] or r["file_url"]},
         })
@@ -253,7 +260,7 @@ def crafts():
                where es1.entity_id = any(%s) and e.type in ('monument','place') and e.id <> es1.entity_id and e.lat is not null""",
             (ids,)).fetchall()
         photos = conn.execute(
-            """select es.entity_id, s.id, s.file_url, s.lat, s.lng, s.author, s.origin
+            """select es.entity_id, s.id, s.file_url, s.lat, s.lng, s.author, s.licence, s.origin
                from entity_sources es join sources s on s.id = es.source_id
                where es.entity_id = any(%s) and s.type = 'photo' and s.status = 'done' order by s.id""",
             (ids,)).fetchall()
@@ -272,10 +279,11 @@ def crafts():
             named[t["entity_id"]].append({**p, "how": f"named in “{t['filename']}”"})
     out = []
     for e in ents:
-        f = [x for x in facts if x["entity_id"] == e["id"]]
+        # English sources first, so the record reads in one language; other languages fill the gaps
+        f = sorted((x for x in facts if x["entity_id"] == e["id"]), key=lambda x: "_en_" not in x["filename"])
         by_field: dict[str, list[dict]] = defaultdict(list)
         for x in f:
-            if all(y["value"].lower() != x["value"].lower() for y in by_field[x["field"]]):
+            if len(by_field[x["field"]]) < 3 and all(y["value"].lower() != x["value"].lower() for y in by_field[x["field"]]):
                 by_field[x["field"]].append({"value": x["value"], "quote": x["quote"], "status": x["status"],
                                              "source_id": x["source_id"], "filename": x["filename"]})
         where: list[dict] = []
@@ -302,7 +310,8 @@ def crafts():
             "id": e["id"], "name": e["name"],
             "aliases": sorted({a["alias"] for a in aliases if a["entity_id"] == e["id"] and a["alias"] != e["name"]}),
             "facts": by_field, "places": uniq, "n_sources": n_sources.get(e["id"], 0),
-            "photos": [p["file_url"] for p in photos if p["entity_id"] == e["id"] and p["file_url"]][:6],
+            "photos": [{"url": p["file_url"], "author": p["author"], "licence": p["licence"]}
+                       for p in photos if p["entity_id"] == e["id"] and p["file_url"]][:6],
             "missing": [lbl for fld, lbl in [("technique", "how it is made"), ("practitioners", "who practises it"),
                                               ("material", "materials"), ("location", "where it is practised")]
                         if fld not in by_field] + ([] if any(p["entity_id"] == e["id"] for p in photos) else ["photos"]),

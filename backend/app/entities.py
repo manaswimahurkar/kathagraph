@@ -397,7 +397,7 @@ def import_wikidata(body: WikidataImport, background: BackgroundTasks):
     with get_conn() as conn:
         rows = conn.execute(
             """select distinct e.id from entities e join sources s on s.entity_id = e.id
-               where e.type = 'monument' and s.type = 'web' and s.source_url like 'https://en.wikipedia.org/%%'
+               where e.type in ('monument', 'craft') and s.type = 'web' and s.source_url like 'https://en.wikipedia.org/%%'
                and (%s::bigint[] is null or e.id = any(%s::bigint[])) order by e.id""",
             (body.entity_ids, body.entity_ids),
         ).fetchall()

@@ -123,9 +123,25 @@ export default function StoriesPage() {
                       selected === s.id ? "border-rust ring-2 ring-rust/20" : "border-line"
                     }`}
                   >
-                    <button onClick={() => setSelected(s.id)} className="block w-full text-left">
-                      <span className="text-[13px] text-rust">{s.entity.name}</span>
-                      <span className="mt-1 block font-serif text-[18px] leading-snug text-ink">{s.story}</span>
+                    <button onClick={() => setSelected(s.id)} className="flex w-full gap-4 text-left">
+                      {s.photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={s.photo.url}
+                          alt=""
+                          loading="lazy"
+                          title={s.photo.author ? `Photo: ${[s.photo.author, s.photo.licence].filter(Boolean).join(", ")}` : undefined}
+                          className="size-20 shrink-0 rounded object-cover sm:size-24"
+                        />
+                      ) : (
+                        <span aria-hidden="true" className="grid size-20 shrink-0 place-items-center rounded bg-sand font-display text-3xl text-ochre sm:size-24">
+                          {s.entity.name.charAt(0)}
+                        </span>
+                      )}
+                      <span className="min-w-0">
+                        <span className="text-[13px] text-rust">{s.entity.name}</span>
+                        <span className="mt-1 block font-serif text-[18px] leading-snug text-ink">{s.story}</span>
+                      </span>
                     </button>
                     {s.quote && (
                       <blockquote className="mt-2 border-l-4 border-ochre/60 pl-3 font-serif text-[15px] italic text-dust">

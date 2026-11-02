@@ -90,7 +90,7 @@ def classify(entity_id: int, item: dict) -> str | None:
     with get_conn() as conn:
         conn.execute(
             """update entities set nature = %s, nature_source = 'wikidata'
-               where id = %s and coalesce(nature_source, '') <> 'manual'""", (nature, entity_id))
+               where id = %s and type = 'monument' and coalesce(nature_source, '') <> 'manual'""", (nature, entity_id))
     log.info("Monument %s is %s (Wikidata: %s)", entity_id, nature, ", ".join(types))
     return nature
 

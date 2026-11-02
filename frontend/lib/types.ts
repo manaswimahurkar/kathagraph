@@ -401,7 +401,9 @@ export interface Story {
   lng: number | null;
   precision: "exact" | "approximate" | null;
   source: { id: number; filename: string; origin: "web" | "field" | null; author: string | null; url: string | null };
+  photo?: PhotoCredit | null;
 }
+export interface PhotoCredit { url: string; author: string | null; licence: string | null }
 export interface StoriesResponse { stories: Story[]; places: number }
 
 export interface JourneyStop {
@@ -418,7 +420,7 @@ export interface CraftFact { value: string; quote: string | null; status: ClaimS
 export interface CraftPlace { name: string; lat: number; lng: number; how: string; precision: string; entity_id?: number }
 export interface Craft {
   id: number; name: string; aliases: string[]; facts: Record<string, CraftFact[]>;
-  places: CraftPlace[]; n_sources: number; photos: string[]; missing: string[];
+  places: CraftPlace[]; n_sources: number; photos: PhotoCredit[]; missing: string[];
 }
 export interface CraftsResponse { crafts: Craft[] }
 
