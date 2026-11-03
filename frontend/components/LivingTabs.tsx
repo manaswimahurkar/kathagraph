@@ -5,6 +5,7 @@ const TABS = [
   { href: "/stories", label: "Stories & legends" },
   { href: "/journeys", label: "Routes & journeys" },
   { href: "/crafts", label: "Crafts" },
+  { href: "/teams", label: "Fellowship teams" },
 ];
 
 export default function LivingTabs({ current }: { current: string }) {

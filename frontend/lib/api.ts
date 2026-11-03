@@ -23,6 +23,7 @@ import type {
   SourceText,
   StoriesResponse,
   JourneysResponse,
+  SourceListItem,
   CraftsResponse,
   TwinReport,
 } from "./types";
@@ -214,6 +215,11 @@ export function getSourceText(id: number): Promise<SourceText> {
 
 export function getStories(): Promise<StoriesResponse> {
   return USE_MOCK ? Promise.reject(new ApiError(NEEDS_LIVE)) : request("/stories");
+}
+
+/** GET /sources: every file in the archive, newest first (at most 500). */
+export function listSources(limit = 500): Promise<{ sources: SourceListItem[] }> {
+  return USE_MOCK ? Promise.reject(new ApiError(NEEDS_LIVE)) : request(`/sources?limit=${limit}`);
 }
 
 export function getJourneys(): Promise<JourneysResponse> {

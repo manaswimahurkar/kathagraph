@@ -78,7 +78,7 @@ export default function SiteHeader() {
               const active =
                 n.href === "/"
                   ? pathname === "/"
-                  : pathname.startsWith(n.href) || (n.href === "/stories" && /^\/(journeys|crafts)/.test(pathname));
+                  : pathname.startsWith(n.href) || (n.href === "/stories" && /^\/(journeys|crafts|teams)/.test(pathname));
               return (
                 <li key={n.href}>
                   <Link

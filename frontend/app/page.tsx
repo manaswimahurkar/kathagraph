@@ -68,6 +68,10 @@ export default function HomePage() {
           <Link href="/why-gujarat" className="whitespace-nowrap text-water underline underline-offset-2">
             Why Gujarat?
           </Link>
+          {" · "}
+          <Link href="/data" className="whitespace-nowrap text-water underline underline-offset-2">
+            Open data
+          </Link>
         </p>
 
 

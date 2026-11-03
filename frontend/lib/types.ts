@@ -434,3 +434,24 @@ export interface TwinReport {
   score: number; stage: "starting" | "collecting" | "ready" | "modelled"; models: number;
   todo: string[]; shots: TwinShot[]; target: number;
 }
+
+/** GET /sources?limit= : every uploaded or imported file, newest first. */
+export interface SourceListItem {
+  id: number;
+  filename: string;
+  type: SourceType;
+  status: SourceStatus;
+  lat: number | null;
+  lng: number | null;
+  captured_at: string | null;
+  file_url: string | null;
+  tag: string | null;
+  description: string | null;
+  created_at: string;
+  origin?: "web" | "field" | null;
+  /** Upload credit: "Asha Patel · Explorer Fellowship 2024", or just a name or a cohort. */
+  author?: string | null;
+  licence?: string | null;
+  source_url?: string | null;
+  parent_source_id?: number | null;
+}

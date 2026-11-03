@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import ListenGuide from "@/components/ListenGuide";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorState, Skeleton } from "@/components/States";
 import { getEntities, getPriorities, upload } from "@/lib/api";
@@ -234,6 +235,9 @@ function SiteKit({ site, todo, where }: { site: EntitySummary; todo?: PriorityMo
           Open its record
         </Link>
       </p>
+      <div className="mt-3">
+        <ListenGuide entityId={site.id} name={site.name} compact />
+      </div>
 
       <h3 className="mt-5 font-medium text-ink">
         To do here {items.length > 0 && <span className="text-dust">({left} of {items.length} left)</span>}

@@ -5,6 +5,8 @@ import KnowledgeGraph from "@/components/KnowledgeGraph";
 import { useParams } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import DigitalTwin from "@/components/DigitalTwin";
+import DownloadRecord from "@/components/DownloadRecord";
+import ListenGuide from "@/components/ListenGuide";
 import Model3D from "@/components/Model3D";
 import PhotoGallery from "@/components/PhotoGallery";
 import SiteWalkthrough from "@/components/SiteWalkthrough";
@@ -140,6 +142,10 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
           </p>
         )}
 
+        <div className="mt-4 max-w-2xl">
+          <ListenGuide entityId={entity.id} name={entity.name} />
+        </div>
+
         <nav aria-label="On this page" className="mt-5 flex flex-wrap gap-2 text-sm">
           <JumpLink href="#facts">{entity.claims.length} facts</JumpLink>
           <JumpLink href="#disagreements" tone={entity.conflicts.length ? "ochre" : undefined}>
@@ -151,6 +157,7 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
           {entity.lat != null && <JumpLink href="#visit">Walk through</JumpLink>}
           <JumpLink href="#sources">{entity.sources.length} sources</JumpLink>
           <JumpLink href="#contribute">Add material</JumpLink>
+          <JumpLink href="#data">Download</JumpLink>
         </nav>
       </header>
 
@@ -194,6 +201,14 @@ function MonumentRecord({ entity, onChanged }: { entity: EntityDetail; onChanged
         </Section>
       )}
       <SourceList entity={entity} />
+      <Section
+        id="data"
+        title="Use this record"
+        intro="Open data for researchers, students and other archives."
+        action="Download the facts as a spreadsheet, or the whole record for code."
+      >
+        <DownloadRecord entity={entity} />
+      </Section>
       <Contribute entity={entity} />
     </article>
     </NatureContext.Provider>

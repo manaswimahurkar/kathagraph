@@ -124,6 +124,13 @@ export default function JourneysPage() {
                   ))}
                 </ul>
               )}
+              {state.data.field.length > 0 && (
+                <p className="mt-2 text-[14px]">
+                  <Link href="/teams" className="text-water underline-offset-2 hover:underline">
+                    See each team&apos;s photos, facts and the gaps they closed →
+                  </Link>
+                </p>
+              )}
             </section>
             <section>
               <h2 className="text-[13px] uppercase tracking-wide text-dust">Heritage trails</h2>
