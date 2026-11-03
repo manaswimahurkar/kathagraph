@@ -86,7 +86,9 @@ _BLOCKED_WORDS = {
     "asdf", "qwerty", "xyz", "abc", "lol", "lmao", "bot",
 }
 _BLOCKED_INSIDE = {"poop", "fuck", "shit", "chutiya", "bhenchod", "behenchod", "madarchod", "porn", "asshole", "bitch",
-                   "pussy", "cunt", "dildo", "nigger", "faggot", "bhosd", "wanker", "dickhead"}
+                   "pussy", "cunt", "dildo", "nigger", "faggot", "bhosd", "wanker", "dickhead",
+                   "vagina", "penis", "boob", "nipple", "sexy", "horny", "blowjob", "handjob", "jerkoff", "orgasm",
+                   "masturbat", "tatti"}
 _LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i"})
 
 

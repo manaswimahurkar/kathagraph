@@ -31,6 +31,7 @@ def test_real_names_pass_and_joke_or_abusive_names_do_not():
         assert accounts.name_problem(n) is None, n
     bad = ["poop", "Poop", "p00p", "poooooop", "Mr Poop", "poopface", "fuck you", "sh1t", "admin", "asdf",
            "aaaa", "x", "12345", "a1", "www.spam.com", "me@mail.com", "chutiya", "KathaGraph team",
-           "pussy", "Pu55y", "pussycat", "big cunt", "bhosdike", "tatti"]
+           "pussy", "Pu55y", "pussycat", "big cunt", "bhosdike", "tatti",
+           "fingernavagina", "FingerNaVagina", "bigpenis", "sexyboy"]
     for n in bad:
         assert accounts.name_problem(n) is not None, n
