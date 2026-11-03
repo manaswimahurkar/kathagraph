@@ -260,13 +260,22 @@ function SiteKit({ site, todo, where }: { site: EntitySummary; todo?: PriorityMo
         </ul>
       )}
 
-      <div className="mt-5 grid gap-2">
+      <div className="mt-5 rounded-md border border-ochre/40 bg-ochre-soft/40 px-3.5 py-2.5 text-[14px] leading-relaxed">
+        <p className="font-medium text-ink">Only add what isn&apos;t already on the internet</p>
+        <p className="mt-0.5 text-dust">
+          Published material (Wikipedia, Wikimedia Commons) is already in the archive. What&apos;s needed from you is what
+          you can see or hear here: your own photos taken today, inscriptions, the state of the site, and what locals tell
+          you. Please don&apos;t upload photos or text copied from websites, Wikipedia or books.
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-2">
         <button
           onClick={() => camera.current?.click()}
           disabled={busy}
           className="rounded-md bg-water px-4 py-3 font-medium text-paper hover:opacity-90 disabled:opacity-60"
         >
-          Take or add photos
+          Take photos here
         </button>
         <input ref={camera} type="file" accept="image/*" capture="environment" multiple className="sr-only" onChange={(e) => sendPhotos(e.target.files)} />
         <label className="mt-2 block text-[14px] text-dust" htmlFor="field-note">
