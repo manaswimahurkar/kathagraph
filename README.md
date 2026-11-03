@@ -79,7 +79,7 @@ The problem statement lists three pathways. KathaGraph combines all three on one
 | **Inscriptions** (`/inscription`) | Read and translate an inscription photo; Vikram Samvat and Shaka dates converted by fixed rules |
 | **Review** (`/review`) and **Same place?** (`/duplicates`) | Check AI facts against their passages, riskiest first; decide whether two records are one place |
 | **Stories**, **Routes**, **Crafts** (`/stories`, `/journeys`, `/crafts`) | Living heritage on the map |
-| **Join** and **My contributions** (`/join`, `/me`) | Optional contributor accounts: name, email, password and "What brought you here?"; every file you add and fact you check is credited to you and listed on your profile |
+| **Join** and **My contributions** (`/join`, `/me`) | Optional contributor accounts: name, email, password and "What brought you here?"; every file you add and fact you check is credited to you and listed on your profile; you can delete your account from the same page |
 | **Admin** (`/admin`) | Locked by the admin token: archive health, one-click maintenance jobs, failed files (read again or delete), Wikipedia imports, fixing one record, and the contributor list |
 | **Why Gujarat** (`/why-gujarat`) | Why the archive starts with one state, and how it grows to India |
 | **Upload** (`/upload`) and the file reader (`/source/{id}`) | Add photos, PDFs, notes, decks, Word reports or a zipped folder with credit; read any file in full with its English translation |

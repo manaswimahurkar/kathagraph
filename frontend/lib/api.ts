@@ -343,6 +343,12 @@ export function getMe(): Promise<MyContributions> {
   return USE_MOCK ? Promise.reject(new ApiError(NEEDS_ACCOUNTS)) : request("/me");
 }
 
+/** Delete the signed-in account for good (the password is checked again). */
+export async function deleteAccount(password: string): Promise<void> {
+  await request("/me/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) });
+  setSession(null);
+}
+
 export function updateMe(input: { name?: string; reason?: string }): Promise<Account> {
   return request("/me", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
 }

@@ -209,6 +209,27 @@ def update_me(body: ProfilePatch, user: dict = Depends(require_user)):
     return _public(row)
 
 
+class DeleteAccount(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/me/delete", status_code=204, dependencies=[Depends(auth_limit)])
+def delete_me(body: DeleteAccount, user: dict = Depends(require_user)):
+    """Delete the signed-in account for good, after checking the password again.
+
+    What goes: the account (name, email, password hash, reason) and every sign-in session.
+    What stays: the files and fact reviews they gave the archive, because other records and
+    facts now rest on them. They stay unlinked from any account, and the uploader's name on
+    them is replaced by "Former contributor"."""
+    with get_conn() as conn:
+        row = conn.execute("select password_hash from users where id = %s", (user["id"],)).fetchone()
+        if not row or not check_password(body.password, row["password_hash"]):
+            raise HTTPException(403, "That password is not right.")  # 403, not 401: still signed in
+        conn.execute("update sources set author = 'Former contributor' where contributor_id = %s", (user["id"],))
+        conn.execute("delete from users where id = %s", (user["id"],))  # sessions go with it (cascade)
+    return None
+
+
 # ---------- admin view of the archive ----------
 
 from .security import require_admin  # noqa: E402  (kept beside the admin view it guards)

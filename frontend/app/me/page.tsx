@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorState, Skeleton } from "@/components/States";
-import { getMe, signOut, updateMe, type MyContributions } from "@/lib/api";
+import { ApiError, deleteAccount, getMe, signOut, updateMe, type MyContributions } from "@/lib/api";
 import { getSession, initials, updateSessionUser } from "@/lib/auth";
 
 // A contributor's profile: who they are, why they came, and everything they have added or checked.
@@ -192,6 +192,84 @@ export default function MePage() {
           </div>
         )}
       </section>
+
+      <DeleteAccount onDeleted={() => router.push("/")} />
     </main>
+  );
+}
+
+/** Danger zone: deleting the account needs the password again and an explicit tick. */
+function DeleteAccount({ onDeleted }: { onDeleted: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [sure, setSure] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <section className="mt-12 rounded-md border border-rust/40 bg-rust-soft/40 px-4 py-4 sm:px-5">
+      <h2 className="font-display text-xl text-rust">Delete my account</h2>
+      <p className="mt-1 text-[15px] text-ink">
+        This removes your name, email, password and profile for good, and signs you out everywhere. The files and fact
+        checks you gave the archive stay, because other records rest on them, but they are no longer linked to you and
+        your name on them becomes “Former contributor”.
+      </p>
+      {!open ? (
+        <button onClick={() => setOpen(true)} className="mt-3 rounded-md border border-rust/50 px-3 py-1.5 text-[14px] font-medium text-rust hover:bg-rust-soft">
+          Delete my account…
+        </button>
+      ) : (
+        <form
+          className="mt-3 space-y-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setError(null);
+            try {
+              await deleteAccount(password);
+              onDeleted();
+            } catch (err) {
+              setError(err instanceof ApiError ? err.message : "Couldn't delete the account. Try again.");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <label className="block text-[14px] font-medium text-ink">
+            Your password, to confirm it&apos;s you
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1 w-full max-w-sm rounded-md border border-line bg-paper px-3 py-2 text-[16px] text-ink"
+            />
+          </label>
+          <label className="flex items-start gap-2 text-[14px] text-ink">
+            <input type="checkbox" checked={sure} onChange={(e) => setSure(e.target.checked)} className="mt-1" />
+            I understand this can&apos;t be undone.
+          </label>
+          {error && <p role="alert" className="rounded border border-rust/30 bg-rust-soft px-3 py-2 text-[14px] text-rust">{error}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" disabled={!sure || !password || busy} className="rounded-md bg-rust px-3 py-1.5 text-[14px] font-medium text-paper hover:opacity-90 disabled:opacity-40">
+              {busy ? "Deleting…" : "Delete my account for good"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setPassword("");
+                setSure(false);
+                setError(null);
+              }}
+              className="rounded-md border border-line px-3 py-1.5 text-[14px] text-ink hover:bg-sand"
+            >
+              Keep my account
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }
