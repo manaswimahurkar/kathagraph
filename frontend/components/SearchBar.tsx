@@ -21,7 +21,16 @@ const LANGS = [
   { code: "gu-IN", label: "ગુ", name: "Gujarati" },
 ] as const;
 
-export default function SearchBar({ initial = "", autoFocus = false }: { initial?: string; autoFocus?: boolean }) {
+export default function SearchBar({
+  initial = "",
+  autoFocus = false,
+  langsOnPhone = true,
+}: {
+  initial?: string;
+  autoFocus?: boolean;
+  /** false: hide the voice-language row on phones (it shows from the sm breakpoint up). */
+  langsOnPhone?: boolean;
+}) {
   const router = useRouter();
   const [q, setQ] = useState(initial);
   const [supported, setSupported] = useState(false);
@@ -131,7 +140,7 @@ export default function SearchBar({ initial = "", autoFocus = false }: { initial
       </form>
 
       {supported && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12px] text-dust">
+        <div className={`mt-1.5 flex-wrap items-center gap-1.5 text-[12px] text-dust ${langsOnPhone ? "flex" : "hidden sm:flex"}`}>
           <span>Voice language:</span>
           {LANGS.map((l) => (
             <button
