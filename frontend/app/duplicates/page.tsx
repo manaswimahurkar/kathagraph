@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorState, Skeleton } from "@/components/States";
 import { getDuplicates, markDifferent, mergeMonuments } from "@/lib/api";
+import { useAccount } from "@/lib/auth";
 import type { DuplicatePair, DuplicateSide, DuplicatesResponse } from "@/lib/types";
 
 // "Same place?": monuments that may be recorded twice under different names. A person decides,
@@ -16,6 +17,7 @@ export default function DuplicatesPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const user = useAccount();
 
   const load = useCallback(() => {
     setState({ kind: "loading" });
@@ -70,6 +72,15 @@ export default function DuplicatesPage() {
           ← Back to checking AI facts
         </Link>
       </p>
+      {!user && (
+        <p className="mt-4 rounded border border-ochre/40 bg-ochre-soft px-4 py-2 text-[15px] text-ink">
+          Merging joins two records for good, so it needs an account.{" "}
+          <Link href="/join?next=/duplicates" className="font-medium text-water underline underline-offset-2">
+            Join or sign in
+          </Link>{" "}
+          to merge. Anyone can mark two records as different places.
+        </p>
+      )}
 
       {state.kind === "loading" && <Skeleton className="mt-8 h-64 w-full" />}
       {state.kind === "error" && (
@@ -108,10 +119,10 @@ export default function DuplicatesPage() {
                   <Side s={p.b} />
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                  <button disabled={busy === key(p)} onClick={() => act(p, "keepA")} className="rounded-md bg-water px-3 py-2 text-[14px] font-medium text-paper hover:opacity-90 disabled:opacity-50">
+                  <button disabled={busy === key(p) || !user} onClick={() => act(p, "keepA")} className="rounded-md bg-water px-3 py-2 text-[14px] font-medium text-paper hover:opacity-90 disabled:opacity-50">
                     Same place: keep “{p.a.name}”
                   </button>
-                  <button disabled={busy === key(p)} onClick={() => act(p, "keepB")} className="rounded-md bg-water px-3 py-2 text-[14px] font-medium text-paper hover:opacity-90 disabled:opacity-50">
+                  <button disabled={busy === key(p) || !user} onClick={() => act(p, "keepB")} className="rounded-md bg-water px-3 py-2 text-[14px] font-medium text-paper hover:opacity-90 disabled:opacity-50">
                     Same place: keep “{p.b.name}”
                   </button>
                   <button disabled={busy === key(p)} onClick={() => act(p, "different")} className="rounded-md border border-line px-3 py-2 text-[14px] font-medium text-ink hover:bg-sand disabled:opacity-50">

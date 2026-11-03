@@ -71,7 +71,7 @@ The problem statement lists three pathways. KathaGraph combines all three on one
 | Page | What it does |
 |---|---|
 | **Map** (`/`) | 3D map of Gujarat; pins coloured by documentation health; time-travel slider; separate markers for built sites, natural sites and settlements |
-| **Monument record** (`/monument/{id}`) | Facts with their exact quotes and sources, disagreements side by side, an evidence graph, what's still missing (a checklist that fits the kind of site), a 3D model, Street View, and the 3D digital-twin panel |
+| **Monument record** (`/monument/{id}`) | Facts with their exact quotes and sources, disagreements side by side, an evidence graph, what's still missing (a checklist that fits the kind of site), a 3D model, Street View, the 3D digital-twin panel, a **Listen** audio guide (read aloud in English, Hindi or Gujarati by the browser) and **Download this record** |
 | **Search** (`/search`) | Meaning-based search across English, Hindi and Gujarati, with **voice search** |
 | **Ask** (`/ask`) | Questions answered only from the archive, every sentence cited, in English, Hindi or Gujarati |
 | **Timeline** (`/timeline`) | Every dated site in order, uncertain dates as ranges, disputed dates flagged |
@@ -79,6 +79,8 @@ The problem statement lists three pathways. KathaGraph combines all three on one
 | **Inscriptions** (`/inscription`) | Read and translate an inscription photo; Vikram Samvat and Shaka dates converted by fixed rules |
 | **Review** (`/review`) and **Same place?** (`/duplicates`) | Check AI facts against their passages, riskiest first; decide whether two records are one place |
 | **Stories**, **Routes**, **Crafts** (`/stories`, `/journeys`, `/crafts`) | Living heritage on the map |
+| **Fellowship teams** (`/teams`, `/teams/{team}`) | Each field team's route, photos, facts and the gaps they closed, built from the credit on their uploads |
+| **Open data** (`/data`) | The archive as CSV and JSON for researchers, every fact with its quote, source, licence and review status |
 | **Join** and **My contributions** (`/join`, `/me`) | Optional contributor accounts: name, email, password and "What brought you here?"; every file you add and fact you check is credited to you and listed on your profile; you can delete your account from the same page |
 | **Admin** (`/admin`) | Locked by the admin token: archive health, one-click maintenance jobs, failed files (read again or delete), Wikipedia imports, fixing one record, and the contributor list |
 | **Why Gujarat** (`/why-gujarat`) | Why the archive starts with one state, and how it grows to India |
@@ -94,25 +96,36 @@ flowchart LR
         FE["Next.js 15 + Tailwind 4 + react-three-fiber<br/>(Vercel)"]
     end
     subgraph API["FastAPI (Render, Docker)"]
+        SEC["Guards<br/>rate limits · sign-in tokens · admin token"]
         UP["/upload<br/>validate · hash · store · 202"]
         Q["Background worker<br/>one file at a time"]
         R["Read APIs<br/>search · ask · entities · review<br/>timeline · stories · journeys · crafts · twin"]
+        AC["Accounts and admin<br/>/auth · /me · /admin"]
+        POOL["Connection pool<br/>psycopg_pool"]
     end
+    CI["GitHub Actions<br/>tests + build on every push<br/>keep-awake ping"]
     ST[("Supabase Storage<br/>original files")]
     DB[("PostgreSQL + pgvector<br/>(Supabase)")]
     G["Gemini<br/>vision · JSON extraction · embeddings · translation<br/>with model fallback"]
     WK["Wikipedia / Wikidata / Commons<br/>(openly licensed references)"]
 
-    FE -->|REST / JSON| UP
-    FE -->|REST / JSON| R
+    FE -->|REST / JSON| SEC
+    SEC --> UP
+    SEC --> R
+    SEC --> AC
     UP --> ST
     UP --> Q
     Q --> G
-    Q --> DB
-    R --> DB
+    Q --> POOL
+    R --> POOL
+    AC --> POOL
     R --> G
+    POOL --> DB
     WK -->|import| Q
+    CI -.->|deploys| API
 ```
+
+Image versions of the diagrams: [architecture](docs/architecture.png) · [ingestion pipeline](docs/pipeline.png) · [database schema](docs/schema.png).
 
 ### The ingestion pipeline (one file)
 
@@ -137,6 +150,9 @@ Uploads return **202 Accepted** immediately; files move through `pending → pro
 | Module | Responsibility |
 |---|---|
 | `main.py` | App setup, upload (incl. zip expansion and contributor credit), sources, readable text, search, admin jobs |
+| `accounts.py` | Optional contributor accounts (scrypt-hashed passwords, hashed session tokens, name rules), My contributions, account deletion, admin status |
+| `security.py` | Admin token check and per-client rate limits for the AI endpoints |
+| `db.py` | Shared connection pool with a safe fallback to one connection per request |
 | `pipeline.py` | The processing stages for one file, under a lock sized for a 512 MB server |
 | `text_extract.py` / `office.py` | Notes, PDFs, OCR, CSV; PowerPoint and Word parsing with embedded photos; chunking and language detection (en/hi/gu) |
 | `exif.py` | GPS, capture time and compass heading |
@@ -169,6 +185,9 @@ erDiagram
     entities ||--o{ claims : "is described by"
     entities ||--o{ models : "has 3D model"
     entities ||--o{ entity_not_same : "is not the same as"
+    users ||--o{ sessions : "signed in as"
+    users ||--o{ sources : "contributed"
+    users ||--o{ claims : "reviewed"
     chunks ||--o{ claims : "quoted in"
     checklist_items }o..o{ entities : "required for type"
 
@@ -192,6 +211,7 @@ erDiagram
         bigint entity_id FK "home record for imports"
         bigint parent_source_id FK "deck a photo came from"
         bool stories_checked
+        bigint contributor_id FK "account that uploaded it"
     }
     chunks {
         bigint id PK
@@ -231,6 +251,20 @@ erDiagram
         text method "ocr | llm | exif | manual | import"
         real confidence "calibrated"
         text status "unverified | verified | rejected"
+        bigint reviewed_by FK "account that checked it"
+        timestamptz reviewed_at
+    }
+    users {
+        bigint id PK
+        text email "unique, private"
+        text name "credited name"
+        text reason "What brought you here?"
+        text password_hash "salted scrypt"
+    }
+    sessions {
+        text token_hash PK "SHA-256 of the token"
+        bigint user_id FK
+        timestamptz expires_at
     }
     entity_sources {
         bigint entity_id FK
@@ -289,6 +323,10 @@ Interactive documentation: **[/docs](https://kathagraph-api.onrender.com/docs)**
 | POST | `/entities/{id}/models` | Attach a Sketchfab model or upload a `.glb` |
 | POST | `/import/wikipedia` · `/import/wikidata` | Import openly licensed references for monuments or crafts |
 | POST | `/entities/{id}/redate` | Read a monument's texts again for its date of construction or founding only |
+| POST | `/auth/signup` · `/auth/login` · `/auth/logout` | Optional contributor accounts (rate-limited); sign-in returns a bearer token |
+| GET / PATCH | `/me` | The signed-in person's profile and contributions |
+| POST | `/me/delete` | Delete the account (password checked again); contributions stay, unlinked |
+| GET | `/admin/status` | Archive health, failed files and contributors (admin token) |
 | POST | `/admin/classify-nature` | Mark each site built, natural or settlement from Wikidata "instance of" |
 | POST | `/admin/translate` · `/admin/extract-stories` · `/admin/rechunk` · `/admin/reindex` | Backfill jobs for files already in the archive |
 
@@ -305,7 +343,7 @@ The prototype runs on free tiers (Render 512 MB, Supabase free, Gemini free). Th
 - **AI behind an interface.** Gemini calls go through one client with retries, back-off and model fallback. OCR, translation or embeddings can each be swapped for a self-hosted model (e.g. a vision-transformer OCR such as TrOCR, IndicTrans2 for translation) module by module.
 - **Bounded work per request.** Uploads, zip expansion, embedded images, translated pages and photogrammetry bundles all have explicit limits; bundles are streamed through a temporary file, not held in memory.
 - **Shared database connections.** A connection pool (`psycopg_pool`, `DB_POOL_MAX` per instance) lends out a few long-lived connections instead of opening one per request, so a burst of visitors waits a moment rather than exhausting Supabase's connection limit. Dead connections are detected and replaced; `/health` reports the pool's state.
-- **Protected and rate-limited.** Maintenance jobs (re-processing, imports, backfills, deleting files) need an admin token and are switched off when none is configured. The AI endpoints (`/ask`, `/inscription/read`, `/upload`) are rate-limited per client, so one visitor can't use up the AI quota for everyone.
+- **Protected and rate-limited.** Maintenance jobs (re-processing, imports, backfills, deleting files, editing a record directly) need an admin token and are switched off when none is configured. Merging two records, which deletes one, needs a signed-in account. The AI endpoints (`/ask`, `/inscription/read`, `/upload`) are rate-limited per client, so one visitor can't use up the AI quota for everyone.
 - **Tested on every push.** GitHub Actions runs the backend tests (with Tesseract installed) and type-checks and builds the frontend.
 - **Next steps for heavy traffic:** move the in-process worker to a real job queue with separate workers, move rate-limit counters to Redis when there are several instances, serve image thumbnails from a CDN, and cache the read-mostly endpoints (map, timeline, stories).
 
@@ -386,7 +424,7 @@ cd backend
 pip install -r requirements-dev.txt
 python -m pytest
 ```
-About 110 unit tests (160+ cases) cover name matching across scripts, conflict and date logic (BCE, Vikram Samvat, regnal names), text and slide-deck extraction, EXIF, the review-risk score, duplicate detection, citations, translation triggers, place finding, journeys and digital-twin coverage.
+111 unit tests (169 cases) cover name matching across scripts, conflict and date logic (BCE, Vikram Samvat, regnal names), text and slide-deck extraction, EXIF, the review-risk score, duplicate detection, citations, translation triggers, place finding, journeys, digital-twin coverage, password hashing, name rules and rate limits.
 
 ## Deploy
 - **Backend:** Render → New Web Service → this repo, root `backend`, runtime **Docker**, with the variables above (`CORS_ORIGINS` including the Vercel URL).

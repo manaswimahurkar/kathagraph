@@ -1,4 +1,5 @@
 import hashlib
+from contextlib import asynccontextmanager
 import logging
 import mimetypes
 import os
@@ -23,7 +24,31 @@ from .storage import StorageError, upload_bytes
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("kathagraph")
 
-app = FastAPI(title="KathaGraph API", version="0.6.0")
+def recover_interrupted():
+    """Files that were mid-processing when the server stopped would otherwise
+    say 'processing' forever. Mark them so they can be reprocessed."""
+    try:
+        with get_conn() as conn:
+            n = conn.execute(
+                """update sources set status = 'failed',
+                          error = 'Interrupted by a server restart. Use reprocess to run it again.'
+                   where status in ('pending', 'processing')"""
+            ).rowcount
+        if n:
+            log.warning("Marked %d interrupted file(s) as failed", n)
+    except Exception:
+        log.exception("Could not check for interrupted files")
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    """Start-up: recover files a restart interrupted. Shut-down: close the database pool."""
+    recover_interrupted()
+    yield
+    close_pool()
+
+
+app = FastAPI(title="KathaGraph API", version="1.5.0", lifespan=lifespan)
 
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(
@@ -40,27 +65,6 @@ app.include_router(insights_router)
 app.include_router(merge_router)
 app.include_router(living_router)
 
-
-@app.on_event("shutdown")
-def shutdown():
-    close_pool()
-
-
-@app.on_event("startup")
-def recover_interrupted():
-    """Files that were mid-processing when the server stopped would otherwise
-    say 'processing' forever. Mark them so they can be reprocessed."""
-    try:
-        with get_conn() as conn:
-            n = conn.execute(
-                """update sources set status = 'failed',
-                          error = 'Interrupted by a server restart. Use reprocess to run it again.'
-                   where status in ('pending', 'processing')"""
-            ).rowcount
-        if n:
-            log.warning("Marked %d interrupted file(s) as failed", n)
-    except Exception:
-        log.exception("Could not check for interrupted files")
 
 MAX_FILE_BYTES = 20 * 1024 * 1024  # 20 MB
 MAX_FILES_PER_UPLOAD = 50

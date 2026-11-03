@@ -15,7 +15,7 @@ from urllib.parse import unquote
 
 import httpx
 
-from . import embeddings, text_extract
+from . import embeddings
 from .db import get_conn
 from .storage import upload_bytes
 from .wiki import USER_AGENT

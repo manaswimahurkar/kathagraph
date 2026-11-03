@@ -225,7 +225,7 @@ class EntityIn(BaseModel):
     aliases: list[str] = []
 
 
-@router.post("/entities", status_code=201)
+@router.post("/entities", status_code=201, dependencies=[Depends(require_admin)])
 def create_entity(body: EntityIn):
     """Register a monument by hand (e.g. with its known location)."""
     if body.type not in {"monument", "motif", "craft", "place", "person"}:
@@ -246,7 +246,7 @@ class EntityPatch(BaseModel):
     nature: str | None = None   # built | natural | settlement (a person's choice beats Wikidata's)
 
 
-@router.patch("/entities/{entity_id}")
+@router.patch("/entities/{entity_id}", dependencies=[Depends(require_admin)])
 def update_entity(entity_id: int, body: EntityPatch):
     with get_conn() as conn:
         if not conn.execute("select 1 from entities where id = %s", (entity_id,)).fetchone():

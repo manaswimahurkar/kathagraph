@@ -259,3 +259,8 @@ Needs `backend/migrations/2026-11-03_accounts.sql`. Accounts are optional; every
 
 - `GET /admin/status` (X-Admin-Token) → `{ files: {status: n}, file_types: {type: n}, failed: [{id, filename, type, error, created_at}], waiting: [...], facts: {status: n}, entities: {built|natural|settlement|craft|…: n}, translated_sources, users: [{id, name, email, reason, created_at, uploads, reviews}], recent: [...] }`.
 - The `/admin` page uses it plus the existing admin endpoints; the token is kept in sessionStorage for the tab only.
+
+## v1.6: guards on edits
+
+- `POST /entities` and `PATCH /entities/{id}` now need the admin token (the public site never calls them; the admin page does).
+- `POST /entities/{keep_id}/merge` needs a signed-in account (`Authorization: Bearer`), 401 otherwise. `POST /duplicates/dismiss` stays open.

@@ -8,10 +8,11 @@ is remembered, so the same pair is not suggested again.
 from difflib import SequenceMatcher
 from itertools import combinations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from . import matching, models3d
+from .accounts import require_user
 from .db import get_conn
 
 router = APIRouter()
@@ -119,7 +120,7 @@ def merge_into(conn, keep: int, dup: int) -> None:
     conn.execute("delete from entities where id = %s", (dup,))
 
 
-@router.post("/entities/{keep_id}/merge")
+@router.post("/entities/{keep_id}/merge", dependencies=[Depends(require_user)])  # merging deletes a record: signed-in people only
 def merge(keep_id: int, body: MergeIn):
     """Same place: keep `keep_id`, fold the duplicate into it (facts, files, aliases, models, location)."""
     if keep_id == body.duplicate_id:

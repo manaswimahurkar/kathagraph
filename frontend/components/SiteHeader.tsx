@@ -20,16 +20,6 @@ const NAV: { href: string; label: string; short?: string }[] = [
   { href: "/upload", label: "Upload" },
 ];
 
-/** Logo mark: the cross-section of a stepwell, terraces narrowing down to the water. */
-export function StepsMark({ className = "" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 28 20" aria-hidden="true" className={className}>
-      <path d="M0 0h28v4h-4v4h-4v4h-4v4h-4v-4H8V8H4V4H0z" fill="currentColor" />
-      <rect x="12" y="17" width="4" height="3" fill="var(--color-water)" />
-    </svg>
-  );
-}
-
 /** Logo: a domed jharokha (carved window) looking into a stepwell, its terraces stepping down to the water. */
 export function KathaMark({ className = "" }: { className?: string }) {
   return (
