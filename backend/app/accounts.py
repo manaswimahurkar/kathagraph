@@ -67,6 +67,50 @@ def valid_email(email: str) -> bool:
     return bool(EMAIL.match(email)) and len(email) <= 254
 
 
+# ---------- names people are credited under ----------
+
+# Names appear on every file and fact a person contributes, so joke and abusive names are refused.
+# Whole words are matched (so "Bhaskar" or "Dickens" pass); a short list of unambiguous words is
+# also caught inside longer names ("poopface"). Letters are normalised first: l33t-speak and
+# stretched letters ("pooooop") do not get around it.
+_BLOCKED_WORDS = {
+    "poop", "poo", "pee", "fart", "butt", "ass", "arse", "asshole", "shit", "crap", "fuck", "fucker", "bitch",
+    "bastard", "dick", "cock", "penis", "vagina", "boob", "boobs", "tits", "sex", "sexy", "porn", "slut", "whore",
+    "nigga", "retard", "idiot", "stupid", "dumb", "loser", "noob",
+    "chutiya", "chutia", "bhenchod", "behenchod", "madarchod", "bsdk", "gandu", "lund", "lauda",
+    "randi", "harami", "kutta", "kutti", "saala", "kamina",
+    "admin", "administrator", "moderator", "kathagraph", "anonymous", "nobody", "none", "null", "undefined",
+    "asdf", "qwerty", "xyz", "abc", "lol", "lmao", "bot",
+}
+_BLOCKED_INSIDE = {"poop", "fuck", "shit", "chutiya", "bhenchod", "behenchod", "madarchod", "porn", "asshole", "bitch"}
+_LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i"})
+
+
+def _fold(text: str) -> str:
+    """Lower case, l33t-speak undone, and any letter repeated 3+ times cut to 2 ("pooooop" -> "poop")."""
+    return re.sub(r"(.)\1{2,}", r"\1\1", text.lower().translate(_LEET))
+
+
+def name_problem(name: str) -> str | None:
+    """Why a display name can't be used, or None if it is fine."""
+    name = (name or "").strip()
+    letters = [c for c in name if c.isalpha()]
+    if len(name) < 2 or len(letters) < 2:
+        return "Please give a name of at least two letters."
+    if len(name) > 60:
+        return "Please keep the name under 60 characters."
+    if re.search(r"https?://|www\.|@|\.(com|in|org|net)\b", name, re.I):
+        return "A name can't be a web address or an email."
+    if len(set(c.lower() for c in letters)) == 1:
+        return "Please use your real name, or the name you'd like to be credited as."
+    folded = _fold(name)
+    words = re.findall(r"[^\W\d_]+", folded)
+    joined = "".join(words)
+    if any(w in _BLOCKED_WORDS for w in words) or any(b in joined for b in _BLOCKED_INSIDE):
+        return "Please use your real name, or the name you'd like to be credited as."
+    return None
+
+
 # ---------- who is calling ----------
 
 def _bearer(authorization: str | None) -> str | None:
@@ -135,8 +179,9 @@ def signup(body: SignUp):
     if not valid_email(email):
         raise HTTPException(400, "That doesn't look like an email address.")
     name = body.name.strip()
-    if not name:
-        raise HTTPException(400, "Please give your name.")
+    problem = name_problem(name)
+    if problem:
+        raise HTTPException(400, problem)
     with get_conn() as conn:
         if conn.execute("select 1 from users where email = %s", (email,)).fetchone():
             raise HTTPException(409, "An account with this email already exists. Sign in instead.")
@@ -202,6 +247,9 @@ def me(user: dict = Depends(require_user)):
 def update_me(body: ProfilePatch, user: dict = Depends(require_user)):
     with get_conn() as conn:
         if body.name is not None:
+            problem = name_problem(body.name)
+            if problem:
+                raise HTTPException(400, problem)
             conn.execute("update users set name = %s where id = %s", (body.name.strip(), user["id"]))
         if body.reason is not None:
             conn.execute("update users set reason = %s where id = %s", (body.reason.strip() or None, user["id"]))
