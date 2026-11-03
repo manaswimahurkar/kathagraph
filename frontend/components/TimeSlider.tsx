@@ -225,9 +225,19 @@ export default function TimeSlider({ entities }: { entities: EntitySummary[] }) 
 }
 
 /** The button on the home page that starts time travel. */
-export function TimeTravelButton() {
+export function TimeTravelButton({ compact = false }: { compact?: boolean }) {
   const tt = useTimeTravel();
   if (tt.active) return null;
+  if (compact)
+    return (
+      <button
+        type="button"
+        onClick={() => setTimeTravel({ active: true, year: YEAR_MIN, playing: true })}
+        className="flex items-center gap-1.5 rounded-md border border-ochre/40 bg-ochre-soft/40 px-3 py-1.5 text-[13.5px] font-medium text-ink"
+      >
+        <span aria-hidden="true" className="text-ochre">▶</span> Travel through time
+      </button>
+    );
   return (
     <button
       type="button"

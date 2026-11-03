@@ -570,9 +570,10 @@ function CameraRig({
           want.target.x -= Math.cos(want.az) * shift;
           want.target.z += Math.sin(want.az) * shift;
         } else {
-          // narrow screens: pull back, and lift the map into the space above the bottom panel
-          want.dist = u.dist * 1.6;
-          const ahead = want.dist * 0.14;
+          // narrow screens: pull back so the whole state fits the tall screen, and lower the map
+          // into the open space under the (folded) search panel
+          want.dist = u.dist * 2.0;
+          const ahead = -want.dist * 0.1;
           want.target.x += Math.sin(want.az) * ahead;
           want.target.z += Math.cos(want.az) * ahead;
         }
