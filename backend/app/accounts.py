@@ -76,13 +76,17 @@ def valid_email(email: str) -> bool:
 _BLOCKED_WORDS = {
     "poop", "poo", "pee", "fart", "butt", "ass", "arse", "asshole", "shit", "crap", "fuck", "fucker", "bitch",
     "bastard", "dick", "cock", "penis", "vagina", "boob", "boobs", "tits", "sex", "sexy", "porn", "slut", "whore",
-    "nigga", "retard", "idiot", "stupid", "dumb", "loser", "noob",
+    "nigga", "nigger", "faggot", "fag", "chinki", "retard", "idiot", "stupid", "dumb", "loser", "noob",
+    "pussy", "cunt", "twat", "wanker", "prick", "bollocks", "dickhead", "dildo", "cum", "rape", "rapist",
+    "nude", "nudes", "horny", "milf", "hoe", "thot", "jerk", "jackass", "dumbass", "motherfucker",
+    "bhosdi", "bhosdike", "bhosda", "gaand", "chodu", "chut", "lodu", "lavda", "jhaat", "tatti", "suar",
     "chutiya", "chutia", "bhenchod", "behenchod", "madarchod", "bsdk", "gandu", "lund", "lauda",
     "randi", "harami", "kutta", "kutti", "saala", "kamina",
     "admin", "administrator", "moderator", "kathagraph", "anonymous", "nobody", "none", "null", "undefined",
     "asdf", "qwerty", "xyz", "abc", "lol", "lmao", "bot",
 }
-_BLOCKED_INSIDE = {"poop", "fuck", "shit", "chutiya", "bhenchod", "behenchod", "madarchod", "porn", "asshole", "bitch"}
+_BLOCKED_INSIDE = {"poop", "fuck", "shit", "chutiya", "bhenchod", "behenchod", "madarchod", "porn", "asshole", "bitch",
+                   "pussy", "cunt", "dildo", "nigger", "faggot", "bhosd", "wanker", "dickhead"}
 _LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i"})
 
 
