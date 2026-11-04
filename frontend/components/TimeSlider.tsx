@@ -82,17 +82,24 @@ export default function TimeSlider({ entities }: { entities: EntitySummary[] }) 
   return (
     <section
       aria-label="Travel through time"
-      className="kg-panel kg-rise-1 pointer-events-auto fixed inset-x-3 bottom-3 z-20 mx-auto max-w-5xl px-4 pb-3 pt-3 sm:inset-x-6"
+      className="kg-panel kg-rise-1 pointer-events-auto fixed inset-x-2 bottom-2 z-20 mx-auto max-w-5xl px-3 pb-2 pt-2.5 sm:inset-x-6 sm:bottom-3 sm:px-4 sm:pb-3 sm:pt-3"
     >
       <div className="flex flex-wrap items-start gap-x-5 gap-y-1.5">
-        <div className="min-w-[9.5rem]">
-          <p className="font-display text-3xl leading-none text-ochre tabular-nums" aria-live="polite">
+        <div className="min-w-[8rem] sm:min-w-[9.5rem]">
+          <p className="font-display text-2xl leading-none text-ochre tabular-nums sm:text-3xl" aria-live="polite">
             {fmtYear(tt.year)}
           </p>
-          <p className="mt-1 font-serif text-[15px] italic text-dust">{eraOf(tt.year) || " "}</p>
+          <p className="mt-0.5 font-serif text-[14px] italic text-dust sm:mt-1 sm:text-[15px]">{eraOf(tt.year) || " "}</p>
         </div>
 
-        <div className="order-last w-full min-w-0 text-[14px] sm:order-none sm:w-auto sm:flex-1">
+        {/* phones: one short line; the full summary shows on larger screens */}
+        {ready && (
+          <p className="order-last w-full text-[13px] text-dust sm:hidden">
+            <b className="font-medium text-ochre">{stood}</b> of {dated.length} sites standing
+            {maybe > 0 && <>, <b className="font-medium text-ochre">{maybe}</b> maybe</>}
+          </p>
+        )}
+        <div className="order-last hidden w-full min-w-0 text-[14px] sm:order-none sm:block sm:w-auto sm:flex-1">
           {tl.kind === "loading" && <p className="text-dust">Loading dates from the archive…</p>}
           {tl.kind === "error" && <p className="text-rust">Couldn&apos;t load the dates: {tl.message}</p>}
           {ready && (
@@ -136,7 +143,7 @@ export default function TimeSlider({ entities }: { entities: EntitySummary[] }) 
               if (tt.playing) return setTimeTravel({ playing: false });
               setTimeTravel({ playing: true, year: tt.year >= YEAR_MAX ? YEAR_MIN : tt.year });
             }}
-            className="rounded-md bg-water px-4 py-2 text-[14px] font-medium text-paper hover:opacity-90"
+            className="rounded-md bg-water px-3 py-1.5 text-[14px] font-medium text-paper hover:opacity-90 sm:px-4 sm:py-2"
           >
             {tt.playing ? "❚❚ Pause" : "▶ Play"}
           </button>
@@ -145,7 +152,7 @@ export default function TimeSlider({ entities }: { entities: EntitySummary[] }) 
             onClick={() => setTimeTravel({ active: false, playing: false })}
             aria-label="Close time travel"
             title="Back to today (Esc)"
-            className="grid size-9 place-items-center rounded-md border border-line text-dust hover:text-ink"
+            className="grid size-8 place-items-center rounded-md border border-line text-dust hover:text-ink sm:size-9"
           >
             ✕
           </button>
@@ -153,7 +160,7 @@ export default function TimeSlider({ entities }: { entities: EntitySummary[] }) 
       </div>
 
       {/* the rail: era bands, a tick per monument (gold where its date is disputed), and the slider */}
-      <div className="relative mt-3 h-[54px]">
+      <div className="relative mt-1.5 h-[34px] sm:mt-3 sm:h-[54px]">
         <div className="absolute inset-x-0 top-0 h-[18px]">
           {ERAS.map(([a, b, name]) => (
             <div
@@ -166,7 +173,7 @@ export default function TimeSlider({ entities }: { entities: EntitySummary[] }) 
             </div>
           ))}
         </div>
-        <div className="absolute inset-x-0 top-[20px] h-[10px]" aria-hidden="true">
+        <div className="absolute inset-x-0 top-[2px] h-[10px] sm:top-[20px]" aria-hidden="true">
           {dated.map(([id, d]) => (
             <span
               key={id}
@@ -186,7 +193,7 @@ export default function TimeSlider({ entities }: { entities: EntitySummary[] }) 
           value={Math.round(posOf(tt.year) * 1000)}
           onChange={(e) => setTimeTravel({ year: yearOf(Number(e.target.value) / 1000), playing: false })}
           aria-valuetext={fmtYear(tt.year)}
-          className="absolute inset-x-0 top-[30px] w-full accent-[var(--color-ochre)]"
+          className="absolute inset-x-0 top-[12px] w-full accent-[var(--color-ochre)] sm:top-[30px]"
         />
       </div>
       <div className="flex justify-between text-[11.5px] text-dust tabular-nums">
@@ -197,7 +204,7 @@ export default function TimeSlider({ entities }: { entities: EntitySummary[] }) 
         ))}
       </div>
 
-      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[12.5px] text-dust">
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[12.5px] text-dust sm:mt-1.5">
         <p className="hidden sm:block">
           <span className="mr-1 inline-block size-2.5 rounded-full border-[1.5px] border-dashed border-ochre align-middle" /> Flickering = sources
           disagree on when it was built. Dates are AI-read from sources; few are checked by a person yet.

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import Explainer from "@/components/Explainer";
 import LivingTabs from "@/components/LivingTabs";
 import { ErrorState, Skeleton } from "@/components/States";
 import { listSources } from "@/lib/api";
@@ -38,6 +39,26 @@ export default function TeamsPage() {
         part of the archive: see where they went, what they found, and which gaps they closed.
       </p>
       <LivingTabs current="/teams" />
+      <Explainer
+        what={
+          <>
+            A page for every fellowship, field team or student who has added their own fieldwork to the archive. It
+            shows where they went (rebuilt from their photos), their photos, the facts the archive read from their notes
+            and whether a person has checked them, and the gaps they closed: things no other source had, like the only
+            interior photograph of a stepwell.
+          </>
+        }
+        how={
+          <>
+            Open a team to see their work site by site, and what is still missing for the next team. To add your own
+            team, fill in &ldquo;Your name&rdquo; and &ldquo;Programme or cohort&rdquo; on the{" "}
+            <Link href="/upload" className="text-water underline underline-offset-2">
+              upload page
+            </Link>
+            .
+          </>
+        }
+      />
 
       {state.kind === "loading" && <Skeleton className="mt-8 h-64 w-full" />}
       {state.kind === "error" && (

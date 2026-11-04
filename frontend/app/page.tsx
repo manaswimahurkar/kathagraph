@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useState } from "react";
 import SearchBar from "@/components/SearchBar";
 import TimeSlider, { TimeTravelButton } from "@/components/TimeSlider";
+import { useTimeTravelActive } from "@/lib/timeTravel";
 import { useEntities } from "@/lib/useEntities";
 
 // The home page is the 3D map of Gujarat itself (drawn by WorldBackground in the layout).
 // Monuments open as pop-up cards when you click them on the map; this page only adds
 // a floating search bar and a notice if the monuments can't be loaded.
 // On phones the panel folds down to the search box and two buttons, so the map stays visible;
-// "More" opens the rest.
+// "More" opens the rest. While travelling in time, the panel hides on phones (it returns when time travel closes).
 
 export default function HomePage() {
   const { state, retry } = useEntities();
@@ -18,10 +19,11 @@ export default function HomePage() {
   const unmapped = entities.filter((e) => e.lat == null || e.lng == null);
   const [more, setMore] = useState(false); // phones only: show the rest of the panel
   const extra = more ? "" : "hidden sm:block";
+  const travelling = useTimeTravelActive(); // phones: the search panel steps aside so the map shows above the slider
 
   return (
     <div className="relative min-h-[calc(100svh-6.5rem)] px-3 pt-3 sm:px-6 sm:pt-5">
-      <div className="kg-panel kg-rise-1 w-full max-w-md p-3">
+      <div className={`kg-panel kg-rise-1 w-full max-w-md p-3 ${travelling ? "hidden sm:block" : ""}`}>
         <h1 className="sr-only">KathaGraph: what do we actually know about each monument?</h1>
         <SearchBar langsOnPhone={more} />
 

@@ -573,7 +573,9 @@ function CameraRig({
           // narrow screens: pull back so the whole state fits the tall screen, and lower the map
           // into the open space under the (folded) search panel
           want.dist = u.dist * 2.0;
-          const ahead = -want.dist * 0.1;
+          // while travelling in time the search panel is hidden and the slider sits at the bottom,
+          // so raise the map into the open space above the slider instead
+          const ahead = (getTimeTravel().active ? 0.06 : -0.1) * want.dist;
           want.target.x += Math.sin(want.az) * ahead;
           want.target.z += Math.cos(want.az) * ahead;
         }

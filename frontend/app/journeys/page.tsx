@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import GujaratMap2D, { type MapPoint, type MapRoute } from "@/components/GujaratMap2D";
+import Explainer from "@/components/Explainer";
 import LivingTabs from "@/components/LivingTabs";
 import { ErrorState, Skeleton } from "@/components/States";
 import { getJourneys } from "@/lib/api";
@@ -69,6 +70,21 @@ export default function JourneysPage() {
         team&apos;s photos were taken; heritage trails link every mapped monument of one kind in a sensible visiting order.
       </p>
       <LivingTabs current="/journeys" />
+      <Explainer
+        what={
+          <>
+            Two kinds of route across Gujarat. <b className="font-medium">Field journeys</b> are the real paths fieldwork
+            teams took, rebuilt from where and when their photos were taken. <b className="font-medium">Heritage trails</b>{" "}
+            join every monument of one kind (all the stepwells, all the temples) in a sensible order to visit them.
+          </>
+        }
+        how={
+          <>
+            Pick a route from the list to draw it on the map and list its stops in order. Click a stop to open that
+            monument&apos;s record, or use a trail to plan a trip.
+          </>
+        }
+      />
 
       {state.kind === "loading" && <Skeleton className="mt-8 h-[420px] w-full" />}
       {state.kind === "error" && (
